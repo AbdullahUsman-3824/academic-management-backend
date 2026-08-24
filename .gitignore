@@ -45,10 +45,12 @@ lerna-debug.log*
 # ==========================================
 # IDEs and Editors
 # ==========================================
-# JetBrains (WebStorm, IntelliJ, etc.)
 .idea/
 *.iwu
 *.iws
+.agents/*
+.claude/*
+.windsurf/*
 
 # Visual Studio Code
 .vscode/*
@@ -72,3 +74,5 @@ Thumbs.db
 # ==========================================
 #.dockerignore
 #.data/
+
+/src/generated/prisma
