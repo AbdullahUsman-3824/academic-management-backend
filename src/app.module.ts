@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './modules/auth/auth.module';
-import { UsersModule } from './modules/users/users.module';
+import { UserModule } from './modules/user/user.module';
 import { StudentsModule } from './modules/people/students/students.module';
 import { FacultyModule } from './modules/people/faculty/faculty.module';
 import { BatchesModule } from './modules/academics/batches/batches.module';
@@ -20,8 +21,9 @@ import { GradeScalesModule } from './modules/assessments/grade-scales/grade-scal
 
 @Module({
   imports: [
+    DatabaseModule,
     AuthModule,
-    UsersModule,
+    UserModule,
     StudentsModule,
     FacultyModule,
     BatchesModule,

@@ -1,0 +1,59 @@
+// =====================================================
+// MODULE 4: COURSE MANAGEMENT
+// =====================================================
+
+model Course {
+  id          Int       @id @default(autoincrement())
+  code        String    @unique
+  name        String
+  description String?
+  creditHours Int       @map("credit_hours")
+  status      String    @default("active") // active | inactive
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime? @updatedAt @map("updated_at")
+
+  courseEnrollments CourseEnrollment[]
+  courseAllocations CourseAllocation[]
+  courseResults     StudentCourseResult[]
+
+  @@map("courses")
+}
+
+model CourseEnrollment {
+  id                      Int       @id @default(autoincrement())
+  studentAcademicRecordId Int       @map("student_academic_record_id")
+  courseId                Int       @map("course_id")
+  status                  String    @default("enrolled") // enrolled | dropped | completed | failed | reappear
+  isExtra                 Boolean   @default(false) @map("is_extra") // true when Admin adds extra or reappear subject
+  enrolledAt              DateTime  @default(now()) @map("enrolled_at")
+  droppedAt               DateTime? @map("dropped_at")
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime? @updatedAt @map("updated_at")
+
+  studentAcademicRecord StudentAcademicRecord @relation(fields: [studentAcademicRecordId], references: [id])
+  course                Course                @relation(fields: [courseId], references: [id])
+  courseResults         StudentCourseResult[]
+
+  @@unique([studentAcademicRecordId, courseId])
+  @@map("course_enrollments")
+}
+
+model CourseAllocation {
+  id                Int       @id @default(autoincrement())
+  courseId          Int       @map("course_id")
+  facultyId         Int       @map("faculty_id")
+  academicSessionId Int       @map("academic_session_id")
+  sectionId         Int       @map("section_id")
+  status            String    @default("active") // active | inactive
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime? @updatedAt @map("updated_at")
+
+  course          Course          @relation(fields: [courseId], references: [id])
+  faculty         Faculty         @relation(fields: [facultyId], references: [id])
+  academicSession AcademicSession @relation(fields: [academicSessionId], references: [id])
+  section         Section         @relation(fields: [sectionId], references: [id])
+  assessments     Assessment[]
+
+  @@unique([courseId, facultyId, academicSessionId, sectionId])
+  @@map("course_allocations")
+}
