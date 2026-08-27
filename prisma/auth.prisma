@@ -1,0 +1,57 @@
+// =====================================================
+// MODULE 1: AUTHENTICATION & USER MANAGEMENT
+// =====================================================
+
+model Role {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique // student | faculty | admin | finance
+  description String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime? @updatedAt @map("updated_at")
+
+  users           User[]
+  rolePermissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  description String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime? @updatedAt @map("updated_at")
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       Int @map("role_id")
+  permissionId Int @map("permission_id")
+
+  role       Role       @relation(fields: [roleId], references: [id])
+  permission Permission @relation(fields: [permissionId], references: [id])
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model User {
+  id           Int       @id @default(autoincrement())
+  username     String    @unique
+  passwordHash String    @map("password_hash")
+  roleId       Int       @map("role_id")
+  status       String    @default("active") // active | inactive
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime? @updatedAt @map("updated_at")
+
+  role             Role                  @relation(fields: [roleId], references: [id])
+  student          Student?
+  faculty          Faculty?
+  finalizedResults StudentCourseResult[] @relation("ResultFinalizedBy")
+
+  @@map("users")
+}
