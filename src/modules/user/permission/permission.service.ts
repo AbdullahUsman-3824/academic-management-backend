@@ -10,7 +10,7 @@ export class PermissionService {
     return this.prisma.permission.findMany({ orderBy: { name: 'asc' } });
   }
 
-  async findById(id: number): Promise<Permission> {
+  async findById(id: string): Promise<Permission> {
     const permission = await this.prisma.permission.findUnique({
       where: { id },
     });

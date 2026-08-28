@@ -3,7 +3,7 @@
 // =====================================================
 
 model AssessmentCategory {
-  id           Int       @id @default(autoincrement())
+  id           String    @id @default(uuid()) @db.Uuid
   name         String // Quiz | Assignment | Presentation | Attendance | Mid-term | Final | Others
   weightage    Decimal   @db.Decimal(5, 2) // Percentage weight e.g. 10, 20, 30, 50
   displayOrder Int       @default(0) @map("display_order")
@@ -17,14 +17,14 @@ model AssessmentCategory {
 }
 
 model Assessment {
-  id                   Int       @id @default(autoincrement())
-  courseAllocationId   Int       @map("course_allocation_id")
-  assessmentCategoryId Int       @map("assessment_category_id")
+  id                   String    @id @default(uuid()) @db.Uuid
+  courseAllocationId   String    @map("course_allocation_id") @db.Uuid
+  assessmentCategoryId String    @map("assessment_category_id") @db.Uuid
   title                String // e.g. Quiz 1, Assignment 2, Mid-term
   totalMarks           Decimal   @map("total_marks") @db.Decimal(6, 2)
   assessmentDate       DateTime? @map("assessment_date") @db.Date
   status               String    @default("draft") // draft | submitted
-  createdBy            Int       @map("created_by") // faculty who created it
+  createdBy            String    @map("created_by") @db.Uuid
   submittedAt          DateTime? @map("submitted_at")
   createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt            DateTime? @updatedAt @map("updated_at")
@@ -38,13 +38,13 @@ model Assessment {
 }
 
 model StudentMark {
-  id            Int       @id @default(autoincrement())
-  assessmentId  Int       @map("assessment_id")
-  studentId     Int       @map("student_id")
+  id            String    @id @default(uuid()) @db.Uuid
+  assessmentId  String    @map("assessment_id") @db.Uuid
+  studentId     String    @map("student_id") @db.Uuid
   marksObtained Decimal   @map("marks_obtained") @db.Decimal(6, 2)
   remarks       String?
-  enteredBy     Int?      @map("entered_by") // faculty who entered marks
-  updatedBy     Int?      @map("updated_by")
+  enteredBy     String?   @map("entered_by") @db.Uuid // faculty who entered marks
+  updatedBy     String?   @map("updated_by") @db.Uuid
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime? @updatedAt @map("updated_at")
 
@@ -58,26 +58,26 @@ model StudentMark {
 }
 
 model StudentCourseResult {
-  id                 Int       @id @default(autoincrement())
-  studentId          Int       @map("student_id")
-  courseEnrollmentId Int       @map("course_enrollment_id")
-  courseId           Int       @map("course_id")
-  academicSessionId  Int       @map("academic_session_id")
+  id                 String @id @default(uuid()) @db.Uuid
+  studentId          String @map("student_id") @db.Uuid
+  courseEnrollmentId String @map("course_enrollment_id") @db.Uuid
+  courseId           String @map("course_id") @db.Uuid
+  academicSessionId  String @map("academic_session_id") @db.Uuid
 
-  totalPercentage    Decimal   @map("total_percentage") @db.Decimal(5, 2) // Final percentage after applying weightages
-  grade              String? // A+, A, B+, B, C, D, F
-  gradePoint         Decimal?  @map("grade_point") @db.Decimal(3, 2) // e.g. 4.0, 3.7, 3.0, 0.0
-  creditHours        Int       @map("credit_hours")
+  totalPercentage Decimal  @map("total_percentage") @db.Decimal(5, 2) // Final percentage after applying weightages
+  grade           String? // A+, A, B+, B, C, D, F
+  gradePoint      Decimal? @map("grade_point") @db.Decimal(3, 2) // e.g. 4.0, 3.7, 3.0, 0.0
+  creditHours     Int      @map("credit_hours")
 
-  status             String    @default("draft") // draft | finalized
-  isReappear         Boolean   @default(false) @map("is_reappear")
+  status     String  @default("draft") // draft | finalized
+  isReappear Boolean @default(false) @map("is_reappear")
 
-  calculatedAt       DateTime? @map("calculated_at")
-  finalizedAt        DateTime? @map("finalized_at")
-  finalizedBy        Int?      @map("finalized_by") // Admin who finalized the result
+  calculatedAt DateTime? @map("calculated_at")
+  finalizedAt  DateTime? @map("finalized_at")
+  finalizedBy  String?   @map("finalized_by") @db.Uuid // Admin who finalized the result
 
-  createdAt          DateTime  @default(now()) @map("created_at")
-  updatedAt          DateTime? @updatedAt @map("updated_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime? @updatedAt @map("updated_at")
 
   student          Student          @relation(fields: [studentId], references: [id])
   courseEnrollment CourseEnrollment @relation(fields: [courseEnrollmentId], references: [id])
@@ -90,7 +90,7 @@ model StudentCourseResult {
 }
 
 model GradeScale {
-  id            Int     @id @default(autoincrement())
+  id            String  @id @default(uuid()) @db.Uuid
   gradeLetter   String  @map("grade_letter") // A+, A, B+, B, C, D, F
   minPercentage Decimal @map("min_percentage") @db.Decimal(5, 2)
   maxPercentage Decimal @map("max_percentage") @db.Decimal(5, 2)

@@ -3,7 +3,7 @@
 // =====================================================
 
 model AcademicYear {
-  id        Int      @id @default(autoincrement())
+  id        String   @id @default(uuid()) @db.Uuid
   name      String   @unique // e.g. 2026-27
   startDate DateTime @map("start_date") @db.Date
   endDate   DateTime @map("end_date") @db.Date
@@ -15,12 +15,12 @@ model AcademicYear {
 }
 
 model AcademicSession {
-  id             Int      @id @default(autoincrement())
-  academicYearId Int      @map("academic_year_id")
-  name           String // e.g. Fall 2026 | Spring 2027
+  id             String   @id @default(uuid()) @db.Uuid
+  academicYearId String   @map("academic_year_id") @db.Uuid
+  name           String
   startDate      DateTime @map("start_date") @db.Date
   endDate        DateTime @map("end_date") @db.Date
-  status         String   @default("upcoming") // upcoming | active | completed | cancelled
+  status         String   @default("upcoming")
 
   academicYear           AcademicYear            @relation(fields: [academicYearId], references: [id])
   studentAcademicRecords StudentAcademicRecord[]
@@ -31,7 +31,7 @@ model AcademicSession {
 }
 
 model Batch {
-  id        Int       @id @default(autoincrement())
+  id        String    @id @default(uuid()) @db.Uuid
   name      String    @unique // e.g. SP23
   startDate DateTime  @map("start_date") @db.Date
   endDate   DateTime? @map("end_date") @db.Date
@@ -43,7 +43,7 @@ model Batch {
 }
 
 model Section {
-  id        Int       @id @default(autoincrement())
+  id        String    @id @default(uuid()) @db.Uuid
   name      String // e.g. A | B | C
   status    String    @default("active") // active | inactive
   createdAt DateTime  @default(now()) @map("created_at")
@@ -56,15 +56,14 @@ model Section {
 }
 
 model StudentAcademicRecord {
-  id                Int       @id @default(autoincrement())
-  studentId         Int       @map("student_id")
-  academicSessionId Int       @map("academic_session_id")
-  semesterNumber    Int       @map("semester_number") // 1 to 8
-  sectionId         Int       @map("section_id")
-  status            String // active | frozen | dropped | passed_out
-
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime? @updatedAt @map("updated_at")
+  id                String    @id @default(uuid()) @db.Uuid
+  studentId         String    @map("student_id") @db.Uuid
+  academicSessionId String    @map("academic_session_id") @db.Uuid
+  semesterNumber    Int       @map("semester_number")
+  sectionId         String    @map("section_id") @db.Uuid
+  status            String
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime? @updatedAt @map("updated_at")
 
   student           Student            @relation(fields: [studentId], references: [id])
   academicSession   AcademicSession    @relation(fields: [academicSessionId], references: [id])

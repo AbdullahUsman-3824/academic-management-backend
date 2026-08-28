@@ -1,11 +1,9 @@
-import { SafeUser } from './user.js';
-
+import { UserResponse } from './user.js';
 export interface JwtPayload {
-  sub: number;
-  username: string;
-  roleId: number;
+  sub: string;
 }
+
 export interface LoginResult {
   accessToken: string;
-  user: SafeUser;
+  user: UserResponse;
 }

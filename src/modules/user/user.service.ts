@@ -47,7 +47,7 @@ export class UserService {
     });
   }
 
-  async findById(id: number): Promise<SafeUser> {
+  async findById(id: string): Promise<SafeUser> {
     const user = await this.prisma.user.findUnique({
       where: { id },
       omit: { passwordHash: true },
@@ -76,7 +76,7 @@ export class UserService {
     });
   }
 
-  async update(id: number, data: UpdateUserDto): Promise<SafeUser> {
+  async update(id: string, data: UpdateUserDto): Promise<SafeUser> {
     await this.findById(id);
 
     const { password, ...rest } = data;
@@ -93,7 +93,7 @@ export class UserService {
     });
   }
 
-  async deactivate(id: number): Promise<SafeUser> {
+  async deactivate(id: string): Promise<SafeUser> {
     await this.findById(id);
 
     return this.prisma.user.update({
@@ -103,7 +103,7 @@ export class UserService {
     });
   }
 
-  async activate(id: number): Promise<SafeUser> {
+  async activate(id: string): Promise<SafeUser> {
     await this.findById(id);
 
     return this.prisma.user.update({
