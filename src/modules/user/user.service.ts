@@ -8,15 +8,8 @@ import { PrismaService } from '../../database/prisma.service';
 import { Prisma, User } from '../../generated/prisma/client.js';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-
-const USER_STATUS = {
-  ACTIVE: 'active',
-  INACTIVE: 'inactive',
-} as const;
-
-// User minus the passwordHash field — this is the shape we actually
-// return to callers/controllers.
-export type SafeUser = Omit<User, 'passwordHash'>;
+import { SafeUser } from '../../common/types/user';
+import { USER_STATUS } from '../../common/constants/user-status';
 
 @Injectable()
 export class UserService {
@@ -47,9 +40,6 @@ export class UserService {
     });
   }
 
-  /**
-   * Return all users, ordered by creation date descending.
-   */
   async findAll(): Promise<SafeUser[]> {
     return this.prisma.user.findMany({
       orderBy: { createdAt: 'desc' },
@@ -57,11 +47,7 @@ export class UserService {
     });
   }
 
-  /**
-   * Return a single user by primary key.
-   * Throws NotFoundException if not found.
-   */
-  async findById(id: number): Promise<SafeUser> {
+  async findById(id: string): Promise<SafeUser> {
     const user = await this.prisma.user.findUnique({
       where: { id },
       omit: { passwordHash: true },
@@ -74,14 +60,10 @@ export class UserService {
     return user;
   }
 
-  /**
-   * Find a user whose linked Student or Faculty profile has the given email.
-   * Returns null when no matching profile exists.
-   *
-   * Note: email is stored on the Student/Faculty profiles, not on the User
-   * record itself. passwordHash IS included here since this method is used
-   * internally for login/credential lookup — see findByEmailForAuth vs this.
-   */
+  async findByUsername(username: string): Promise<User | null> {
+    return this.prisma.user.findUnique({ where: { username } });
+  }
+
   async findByEmail(email: string): Promise<User | null> {
     const userWithStudent = await this.prisma.user.findFirst({
       where: { student: { email } },
@@ -94,13 +76,7 @@ export class UserService {
     });
   }
 
-  /**
-   * Update an existing user by id.
-   * If a new plaintext password is supplied, it is hashed before being
-   * persisted; the plaintext value is never written to the database.
-   * Throws NotFoundException if the user does not exist.
-   */
-  async update(id: number, data: UpdateUserDto): Promise<SafeUser> {
+  async update(id: string, data: UpdateUserDto): Promise<SafeUser> {
     await this.findById(id);
 
     const { password, ...rest } = data;
@@ -117,11 +93,7 @@ export class UserService {
     });
   }
 
-  /**
-   * Set a user's status to 'inactive'.
-   * Throws NotFoundException if the user does not exist.
-   */
-  async deactivate(id: number): Promise<SafeUser> {
+  async deactivate(id: string): Promise<SafeUser> {
     await this.findById(id);
 
     return this.prisma.user.update({
@@ -131,11 +103,7 @@ export class UserService {
     });
   }
 
-  /**
-   * Set a user's status to 'active'.
-   * Throws NotFoundException if the user does not exist.
-   */
-  async activate(id: number): Promise<SafeUser> {
+  async activate(id: string): Promise<SafeUser> {
     await this.findById(id);
 
     return this.prisma.user.update({
@@ -145,9 +113,6 @@ export class UserService {
     });
   }
 
-  /**
-   * Verify a plaintext password against a user's stored Argon2 hash.
-   */
   async verifyPassword(user: User, plainPassword: string): Promise<boolean> {
     return argon2.verify(user.passwordHash, plainPassword);
   }

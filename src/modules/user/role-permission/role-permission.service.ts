@@ -14,10 +14,7 @@ export class RolePermissionService {
    * Assign a permission to a role.
    * Throws ConflictException if the mapping already exists.
    */
-  async assignPermission(
-    roleId: number,
-    permissionId: number,
-  ): Promise<void> {
+  async assignPermission(roleId: string, permissionId: string): Promise<void> {
     const existing = await this.prisma.rolePermission.findUnique({
       where: { roleId_permissionId: { roleId, permissionId } },
     });
@@ -37,10 +34,7 @@ export class RolePermissionService {
    * Remove a permission from a role.
    * Throws NotFoundException if the mapping does not exist.
    */
-  async removePermission(
-    roleId: number,
-    permissionId: number,
-  ): Promise<void> {
+  async removePermission(roleId: string, permissionId: string): Promise<void> {
     const existing = await this.prisma.rolePermission.findUnique({
       where: { roleId_permissionId: { roleId, permissionId } },
     });
@@ -59,12 +53,13 @@ export class RolePermissionService {
   /**
    * Get all permissions assigned to a role.
    */
-  async getPermissions(roleId: number): Promise<Permission[]> {
-    const mappings = await this.prisma.rolePermission.findMany({
-      where: { roleId },
-      include: { permission: true },
-      orderBy: { permission: { name: 'asc' } },
-    });
+  async getPermissions(roleId: string): Promise<Permission[]> {
+    const mappings: { permission: Permission }[] =
+      await this.prisma.rolePermission.findMany({
+        where: { roleId },
+        include: { permission: true },
+        orderBy: { permission: { name: 'asc' } },
+      });
 
     return mappings.map((rp) => rp.permission);
   }
@@ -72,10 +67,7 @@ export class RolePermissionService {
   /**
    * Check whether a role has a specific permission.
    */
-  async hasPermission(
-    roleId: number,
-    permissionId: number,
-  ): Promise<boolean> {
+  async hasPermission(roleId: string, permissionId: string): Promise<boolean> {
     const mapping = await this.prisma.rolePermission.findUnique({
       where: { roleId_permissionId: { roleId, permissionId } },
     });
