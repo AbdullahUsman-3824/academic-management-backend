@@ -10,7 +10,7 @@ export class RoleService {
     return this.prisma.role.findMany({ orderBy: { name: 'asc' } });
   }
 
-  async findById(id: number): Promise<Role> {
+  async findById(id: string): Promise<Role> {
     const role = await this.prisma.role.findUnique({ where: { id } });
 
     if (!role) {

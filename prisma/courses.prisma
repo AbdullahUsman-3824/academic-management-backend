@@ -3,7 +3,7 @@
 // =====================================================
 
 model Course {
-  id          Int       @id @default(autoincrement())
+  id          String    @id @default(uuid()) @db.Uuid
   code        String    @unique
   name        String
   description String?
@@ -20,9 +20,9 @@ model Course {
 }
 
 model CourseEnrollment {
-  id                      Int       @id @default(autoincrement())
-  studentAcademicRecordId Int       @map("student_academic_record_id")
-  courseId                Int       @map("course_id")
+  id                      String    @id @default(uuid()) @db.Uuid
+  studentAcademicRecordId String    @map("student_academic_record_id") @db.Uuid
+  courseId                String    @map("course_id") @db.Uuid
   status                  String    @default("enrolled") // enrolled | dropped | completed | failed | reappear
   isExtra                 Boolean   @default(false) @map("is_extra") // true when Admin adds extra or reappear subject
   enrolledAt              DateTime  @default(now()) @map("enrolled_at")
@@ -39,11 +39,11 @@ model CourseEnrollment {
 }
 
 model CourseAllocation {
-  id                Int       @id @default(autoincrement())
-  courseId          Int       @map("course_id")
-  facultyId         Int       @map("faculty_id")
-  academicSessionId Int       @map("academic_session_id")
-  sectionId         Int       @map("section_id")
+  id                String    @id @default(uuid()) @db.Uuid
+  courseId          String    @map("course_id") @db.Uuid
+  facultyId         String    @map("faculty_id") @db.Uuid
+  academicSessionId String    @map("academic_session_id") @db.Uuid
+  sectionId         String    @map("section_id") @db.Uuid
   status            String    @default("active") // active | inactive
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime? @updatedAt @map("updated_at")

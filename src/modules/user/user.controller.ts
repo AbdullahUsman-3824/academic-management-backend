@@ -32,22 +32,22 @@ export class UserController {
   }
 
   @Get(':id')
-  findById(@Param('id', ParseIntPipe) id: number) {
+  findById(@Param('id', ParseIntPipe) id: string) {
     return this.userService.findById(id);
   }
 
   @Patch(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateUserDto) {
+  update(@Param('id', ParseIntPipe) id: string, @Body() dto: UpdateUserDto) {
     return this.userService.update(id, dto);
   }
 
   @Patch(':id/deactivate')
-  deactivate(@Param('id', ParseIntPipe) id: number) {
+  deactivate(@Param('id', ParseIntPipe) id: string) {
     return this.userService.deactivate(id);
   }
 
   @Patch(':id/activate')
-  activate(@Param('id', ParseIntPipe) id: number) {
+  activate(@Param('id', ParseIntPipe) id: string) {
     return this.userService.activate(id);
   }
 }
