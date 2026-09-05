@@ -18,6 +18,7 @@ import { AssessmentsModule } from './modules/assessments/assessments/assessments
 import { MarksModule } from './modules/assessments/marks/marks.module';
 import { ResultsModule } from './modules/assessments/results/results.module';
 import { GradeScalesModule } from './modules/assessments/grade-scales/grade-scales.module';
+import { AcademicYearsModule } from './modules/academics/academic-years/academic-years.module';
 
 @Module({
   imports: [
@@ -38,6 +39,9 @@ import { GradeScalesModule } from './modules/assessments/grade-scales/grade-scal
     MarksModule,
     ResultsModule,
     GradeScalesModule,
+    AcademicYearsModule,
+    AcademicsModule,
+    AcademicYearsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
