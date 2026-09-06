@@ -8,7 +8,7 @@ import {
   Delete,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import { AcademicYearsService } from './academic-years.service';
+import { AcademicYearsService } from '../../academic/services/academic-years.service';
 import { CreateAcademicYearDto } from '../academic-years/dto/create-academic-year.dto';
 import { UpdateAcademicYearDto } from '../academic-years/dto/update-academic-year.dto';
 

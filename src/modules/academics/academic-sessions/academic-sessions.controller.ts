@@ -9,7 +9,7 @@ import {
   ParseUUIDPipe,
   Query,
 } from '@nestjs/common';
-import { AcademicSessionsService } from './academic-sessions.service';
+import { AcademicSessionsService } from '../../academic/services/academic-sessions.service';
 import { CreateAcademicSessionDto } from '../academic-sessions/dto/create-academic-session.dto';
 import { UpdateAcademicSessionDto } from '../academic-sessions/dto/update-academic-session.dto';
 

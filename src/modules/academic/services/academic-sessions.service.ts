@@ -1,20 +1,22 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../../database/prisma.service'; // ← adjust path
-import { CreateAcademicSessionDto } from '../academic-sessions/dto/create-academic-session.dto';
-import { UpdateAcademicSessionDto } from '../academic-sessions/dto/update-academic-session.dto';
+import { PrismaService } from '../../../database/prisma.service';
+import { UpdateAcademicSessionDto } from '../../academics/academic-sessions/dto/update-academic-session.dto';
+import { AcademicSession } from '../types/academic.types';
 
 @Injectable()
 export class AcademicSessionsService {
   constructor(private prisma: PrismaService) {}
 
-  async create(dto: CreateAcademicSessionDto) {
+  async create(dto: AcademicSession) {
     // Check if Academic Year exists
     const year = await this.prisma.academicYear.findUnique({
       where: { id: dto.academicYearId },
     });
 
     if (!year) {
-      throw new NotFoundException(`Academic Year with id ${dto.academicYearId} not found`);
+      throw new NotFoundException(
+        `Academic Year with id ${dto.academicYearId} not found`,
+      );
     }
 
     return this.prisma.academicSession.create({
@@ -87,4 +89,12 @@ export class AcademicSessionsService {
     await this.findOne(id);
     return this.prisma.academicSession.delete({ where: { id } });
   }
+
+  // TODO
+  // findById()
+  // update()
+  // activate()
+  // complete()
+  // cancel()
+  // validateDates()
 }

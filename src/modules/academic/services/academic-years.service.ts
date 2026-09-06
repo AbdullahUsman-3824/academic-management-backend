@@ -1,27 +1,33 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
-import { PrismaService } from '../../../database/prisma.service'; // ← adjust path if needed
-import { CreateAcademicYearDto } from '../academic-years/dto/create-academic-year.dto';
-import { UpdateAcademicYearDto } from '../academic-years/dto/update-academic-year.dto';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
+import { PrismaService } from '../../../database/prisma.service';
+import { UpdateAcademicYearDto } from '../../academics/academic-years/dto/update-academic-year.dto';
+import { AcademicYear } from '../types/academic.types';
 
 @Injectable()
 export class AcademicYearsService {
   constructor(private prisma: PrismaService) {}
 
-  async create(dto: CreateAcademicYearDto) {
+  async create(data: AcademicYear) {
     const existing = await this.prisma.academicYear.findUnique({
-      where: { name: dto.name },
+      where: { name: data.name },
     });
 
     if (existing) {
-      throw new ConflictException(`Academic Year "${dto.name}" already exists`);
+      throw new ConflictException(
+        `Academic Year "${data.name}" already exists`,
+      );
     }
 
     return this.prisma.academicYear.create({
       data: {
-        name: dto.name,
-        startDate: new Date(dto.startDate),
-        endDate: new Date(dto.endDate),
-        status: dto.status ?? 'active',
+        name: data.name,
+        startDate: new Date(data.startDate),
+        endDate: new Date(data.endDate),
+        status: data.status ?? 'active',
       },
     });
   }
@@ -68,4 +74,12 @@ export class AcademicYearsService {
     await this.findOne(id);
     return this.prisma.academicYear.delete({ where: { id } });
   }
+
+  // TODO
+  // findById()
+  // findAll()
+  // update()
+  // validateDates()
+  // activate()
+  // complete()
 }
