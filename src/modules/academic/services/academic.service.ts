@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { CreateAcademicYearDto } from '../dto/create-academic.dto';
+import { CreateAcademicYearDto } from '../dto/create-academic-year.dto';
 import { UpdateAcademicYearDto } from '../dto/update-academic-year.dto';
 import { AcademicYearsService } from './academic-years.service';
 import { AcademicSessionsService } from './academic-sessions.service';
+import { CreateAcademicSessionDto } from '../dto/create-academic-session.dto';
+import { UpdateAcademicSessionDto } from '../dto/update-academic-session.dto';
 // import { BatchService } from './batch.service';
 
 @Injectable()
@@ -12,37 +14,49 @@ export class AcademicService {
     private readonly academicSessionService: AcademicSessionsService,
     // private readonly batchService: BatchService,
   ) {}
+
+  async findAllYears() {
+  return this.academicYearService.findAll();
+}
+
+  async findOneYear(id: string) {
+  return this.academicYearService.findOne(id);
+}
+
+  async updateYear(id: string, dto: UpdateAcademicYearDto) {
+  return this.academicYearService.update(id, dto);
+}
+
+
+  async removeYear(id: string) {
+  return this.academicYearService.remove(id);
+}
+
+
+async createSession(dto: CreateAcademicSessionDto) {
+  return this.academicSessionService.create(dto);
+}
+
+async findAllSessions() {
+  return this.academicSessionService.findAll();
+}
+
+
+async findOneSession(id: string) {
+  return this.academicSessionService.findOne(id);
+}
+
+async updateSession(id: string, dto: UpdateAcademicSessionDto) {
+  return this.academicSessionService.update(id, dto);
+}
+
+async removeSession(id: string) {
+  return this.academicSessionService.remove(id);
+}
+
   async create(dto: CreateAcademicYearDto) {
-    const { sessions, ...rest } = dto;
-
-    const academicYear = await this.academicYearService.create(rest);
-
-    // Then create each session and associate it with the academic year
-    if (sessions && sessions.length > 0) {
-      for (const sessionDto of sessions) {
-        await this.academicSessionService.create({
-          ...sessionDto,
-          academicYearId: academicYear.id,
-        });
-      }
-    }
-  }
-
-  findAll() {
-    return `This action returns all academic`;
-  }
-
-  findOne(id: number) {
-    return `This action returns a #${id} academic`;
-  }
-
-  update(id: number, updateAcademicYearDto: UpdateAcademicYearDto) {
-    return `This action updates a #${id} academic`;
-  }
-
-  remove(id: number) {
-    return `This action removes a #${id} academic`;
-  }
+  return this.academicYearService.create(dto);
+}
   // TODO
   // createAcademicYear()
   // getStructure()

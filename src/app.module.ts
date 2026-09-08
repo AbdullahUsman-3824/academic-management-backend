@@ -14,7 +14,7 @@ import { AssessmentsModule } from './modules/assessments/assessments/assessments
 import { MarksModule } from './modules/assessments/marks/marks.module';
 import { ResultsModule } from './modules/assessments/results/results.module';
 import { GradeScalesModule } from './modules/assessments/grade-scales/grade-scales.module';
-import { AcademicYearsModule } from './modules/academics/academic-years/academic-years.module';
+// import { AcademicYearsModule } from './modules/academics/academic-years/academic-years.module';
 import { AcademicModule } from './modules/academic/academic.module';
 
 @Module({
@@ -32,8 +32,6 @@ import { AcademicModule } from './modules/academic/academic.module';
     MarksModule,
     ResultsModule,
     GradeScalesModule,
-    AcademicYearsModule,
-    AcademicYearsModule,
     AcademicModule,
   ],
   controllers: [AppController],
