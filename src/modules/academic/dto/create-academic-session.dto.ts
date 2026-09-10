@@ -1,5 +1,11 @@
-import { IsString, IsDateString, IsUUID, IsEnum, IsOptional } from 'class-validator';
-import { AcademicSessionStatus } from '../enums/academic-session-status.enum';
+import {
+  IsString,
+  IsDateString,
+  IsUUID,
+  IsEnum,
+  IsOptional,
+} from 'class-validator';
+import { AcademicSessionStatus } from '../enums/academic-status.enum';
 
 export class CreateAcademicSessionDto {
   @IsUUID()

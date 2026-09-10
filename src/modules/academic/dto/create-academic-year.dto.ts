@@ -1,5 +1,4 @@
-import { IsString, IsDateString, IsEnum, IsOptional, IsNotEmpty } from 'class-validator';
-import { AcademicYearStatus } from '../enums/academic-year-status.enum';
+import { IsString, IsDateString, IsNotEmpty } from 'class-validator';
 
 export class CreateAcademicYearDto {
   @IsString()
@@ -11,8 +10,4 @@ export class CreateAcademicYearDto {
 
   @IsDateString()
   endDate!: string;
-
-  @IsNotEmpty()
-  @IsEnum(AcademicYearStatus)
-  status?: AcademicYearStatus;
 }

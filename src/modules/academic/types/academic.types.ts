@@ -1,14 +1,36 @@
-export interface AcademicYear {
+import {
+  AcademicYearStatus,
+  AcademicSessionStatus,
+  BatchStatus,
+} from '../enums/academic-status.enum';
+
+export interface AcademicYearResponse {
+  id: string;
   name: string;
   startDate: Date;
   endDate: Date;
-  status?: 'active' | 'inactive';
+  status: AcademicYearStatus;
 }
 
-export interface AcademicSession {
+export interface AcademicSessionResponse {
+  id: string;
   academicYearId: string;
   name: string;
   startDate: Date;
   endDate: Date;
-  status?: 'upcoming' | 'ongoing' | 'completed';
+  status: AcademicSessionStatus;
+}
+
+export interface BatchResponse {
+  id: string;
+  name: string;
+  startDate: Date;
+  endDate?: Date;
+  status: BatchStatus;
+}
+
+export interface SetupResponse {
+  academicYear: AcademicYearResponse;
+  academicSessions: AcademicSessionResponse[];
+  batch: BatchResponse;
 }
