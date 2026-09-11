@@ -6,10 +6,6 @@ import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
 import { StudentsModule } from './modules/people/students/students.module';
 import { FacultyModule } from './modules/people/faculty/faculty.module';
-import { BatchesModule } from './modules/academics/batches/batches.module';
-import { SectionsModule } from './modules/academics/sections/sections.module';
-import { StudentAcademicRecordsModule } from './modules/academics/student-academic-records/student-academic-records.module';
-import { AcademicsModule } from './modules/academics/academics/academics.module';
 import { CoursesModule } from './modules/courses/courses/courses.module';
 import { EnrollmentsModule } from './modules/courses/enrollments/enrollments.module';
 import { AllocationsModule } from './modules/courses/allocations/allocations.module';
@@ -18,6 +14,8 @@ import { AssessmentsModule } from './modules/assessments/assessments/assessments
 import { MarksModule } from './modules/assessments/marks/marks.module';
 import { ResultsModule } from './modules/assessments/results/results.module';
 import { GradeScalesModule } from './modules/assessments/grade-scales/grade-scales.module';
+// import { AcademicYearsModule } from './modules/academics/academic-years/academic-years.module';
+import { AcademicModule } from './modules/academic/academic.module';
 
 @Module({
   imports: [
@@ -26,10 +24,6 @@ import { GradeScalesModule } from './modules/assessments/grade-scales/grade-scal
     UserModule,
     StudentsModule,
     FacultyModule,
-    BatchesModule,
-    SectionsModule,
-    StudentAcademicRecordsModule,
-    AcademicsModule,
     CoursesModule,
     EnrollmentsModule,
     AllocationsModule,
@@ -38,6 +32,7 @@ import { GradeScalesModule } from './modules/assessments/grade-scales/grade-scal
     MarksModule,
     ResultsModule,
     GradeScalesModule,
+    AcademicModule,
   ],
   controllers: [AppController],
   providers: [AppService],
