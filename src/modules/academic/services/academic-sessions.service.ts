@@ -8,7 +8,7 @@ import { UpdateAcademicSessionDto } from '../dto/update-academic-session.dto';
 import { CreateAcademicSessionDto } from '../dto/create-academic-session.dto';
 import { AcademicSessionResponse } from '../types/academic.types';
 import { AcademicSessionStatus } from '../enums/academic-status.enum';
-import { Prisma } from '@/generated/prisma/client';
+import { Prisma } from '../../../generated/prisma/client';
 
 type TxClient = Prisma.TransactionClient;
 

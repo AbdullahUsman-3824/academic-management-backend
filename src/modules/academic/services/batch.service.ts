@@ -11,7 +11,7 @@ import { UpdateBatchDto } from '../dto/update-batch.dto';
 import { BatchStatus } from '../enums/academic-status.enum';
 import { BatchResponse } from '../types/academic.types';
 
-import { Prisma } from '@/generated/prisma/client';
+import { Prisma } from '../../../generated/prisma/client';
 
 type TxClient = Prisma.TransactionClient;
 type BatchRecord = Prisma.BatchGetPayload<Record<string, never>>;
