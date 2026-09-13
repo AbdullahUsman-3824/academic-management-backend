@@ -5,7 +5,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { UpdateAcademicYearDto } from '../dto/update-academic-year.dto';
 import { AcademicYearResponse } from '../types/academic.types';
 import { AcademicYearStatus } from '../enums/academic-status.enum';
-import { Prisma } from '@/generated/prisma/client';
+import { Prisma } from '../../../generated/prisma/client';
 
 type TxClient = Prisma.TransactionClient;
 
