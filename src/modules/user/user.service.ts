@@ -19,8 +19,13 @@ export class UserService {
    * Create a new user.
    * Throws ConflictException if the username is already taken.
    */
-  async create(data: CreateUserDto): Promise<SafeUser> {
-    const existing = await this.prisma.user.findUnique({
+  async create(
+    data: CreateUserDto,
+    tx?: Prisma.TransactionClient,
+  ): Promise<SafeUser> {
+    const client = tx ?? this.prisma;
+
+    const existing = await client.user.findUnique({
       where: { username: data.username },
     });
 
@@ -31,10 +36,9 @@ export class UserService {
     }
 
     const { password: _password, ...rest } = data;
-
     const passwordHash = await argon2.hash(data.password);
 
-    return this.prisma.user.create({
+    return client.user.create({
       data: { ...rest, passwordHash },
       omit: { passwordHash: true },
     });

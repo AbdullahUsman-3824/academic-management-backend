@@ -17,7 +17,7 @@ export interface StudentListItem {
   gender?: Gender | string | null;
   batch: StudentBatchSummary | null;
   status: StudentStatus | string;
-  admissionDate: Date | string;
+  admissionDate: Date | string | null;
 }
 
 export interface StudentDetail extends StudentListItem {
@@ -31,7 +31,7 @@ export interface StudentDetail extends StudentListItem {
   guardianPhone?: string | null;
   guardianCnic?: string | null;
   createdAt: Date | string;
-  updatedAt: Date | string;
+  updatedAt: Date | string | null;
 }
 
 export interface PaginatedStudents {

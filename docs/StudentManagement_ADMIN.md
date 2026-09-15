@@ -82,7 +82,7 @@ Content-Type: application/json
   "gender": "male",
   "cnic": "35202-1234567-1",
 
-  "profileImageUrl": "https://example.com/profile.jpg",
+  "profileImageUrl": "base64 string",
 
   "phone": "03001234567",
   "address": "House 12, Street 5",
