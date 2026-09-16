@@ -5,8 +5,8 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../../database/prisma.service';
-import { UserService } from '@/modules/user/user.service';
-import { RoleService } from '@/modules/user/role/role.service';
+import { UserService } from '../../../user/user.service';
+import { RoleService } from '../../../user/role/role.service';
 import { CreateStudentDto } from '../dto/create-student.dto';
 import { UpdateStudentDto } from '../dto/update-student.dto';
 import { UpdateStudentStatusDto } from '../dto/update-student-status.dto';
