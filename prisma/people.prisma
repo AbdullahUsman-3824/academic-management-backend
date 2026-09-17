@@ -38,6 +38,9 @@ model Student {
   marks           StudentMark[]
   courseResults   StudentCourseResult[]
 
+  @@index([batchId])
+  @@index([status])
+  @@index([createdAt])
   @@map("students")
 }
 

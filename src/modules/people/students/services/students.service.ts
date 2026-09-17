@@ -77,7 +77,6 @@ export class StudentsService {
         },
         tx,
       );
-      console.log('[DEBUG] User:', user);
 
       // 3. Create student
       const student = await tx.student.create({
@@ -122,29 +121,32 @@ export class StudentsService {
     const skip = (page - 1) * limit;
 
     const search = query.search?.trim();
+    const hasSearch = !!search && search.length >= 2;
 
     const where: Prisma.StudentWhereInput = {
       ...(query.status && { status: query.status }),
       ...(query.batchId && { batchId: query.batchId }),
-      ...(search &&
-        search.length >= 2 && {
-          OR: [
-            { firstName: { contains: search, mode: 'insensitive' } },
-            { middleName: { contains: search, mode: 'insensitive' } },
-            { lastName: { contains: search, mode: 'insensitive' } },
-            { stdRegNumber: { contains: search, mode: 'insensitive' } },
-            { email: { contains: search, mode: 'insensitive' } },
-            { phone: { contains: search, mode: 'insensitive' } },
-            {
-              user: {
+      ...(hasSearch && {
+        OR: [
+          { firstName: { contains: search, mode: 'insensitive' } },
+          { middleName: { contains: search, mode: 'insensitive' } },
+          { lastName: { contains: search, mode: 'insensitive' } },
+          { stdRegNumber: { contains: search, mode: 'insensitive' } },
+          { email: { contains: search, mode: 'insensitive' } },
+          { phone: { contains: search, mode: 'insensitive' } },
+          {
+            user: {
+              is: {
                 username: { contains: search, mode: 'insensitive' },
               },
             },
-          ],
-        }),
+          },
+        ],
+      }),
     };
 
-    const [rows, total] = await this.prisma.$transaction([
+    // Parallel instead of transaction (thoda faster)
+    const [rows, total] = await Promise.all([
       this.prisma.student.findMany({
         where,
         skip,
