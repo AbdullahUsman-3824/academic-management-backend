@@ -75,11 +75,11 @@ export class CoursesController {
   }
 
   @Delete(':id')
-async remove(@Param('id', ParseUUIDPipe) id: string) {
-  await this.coursesService.remove(id);
-  return {
-    success: true,
-    message: 'Course deleted successfully',
-  };
-}
+  async remove(@Param('id', ParseUUIDPipe) id: string) {
+    await this.coursesService.remove(id);
+    return {
+      success: true,
+      message: 'Course deleted successfully',
+    };
+  }
 }

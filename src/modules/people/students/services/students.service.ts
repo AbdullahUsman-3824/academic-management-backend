@@ -18,7 +18,7 @@ import type {
   StudentListItem,
   PaginatedStudents,
 } from '../types/student.types';
-import { Prisma } from '@/generated/prisma/client';
+import { Prisma } from '../../../../generated/prisma/client';
 import type { CellValue } from 'exceljs';
 
 type StudentWithRelations = Prisma.StudentGetPayload<{
@@ -71,19 +71,20 @@ export class StudentsService {
       // 2. Create user
       const user = await this.userService.create(
         {
-          username: dto.stdRegNumber,
+          username: dto.stdRegNumber.toLowerCase(),
           password: defaultPassword,
           roleId: studentRole.id,
         },
         tx,
       );
+      console.log('[DEBUG] User:', user);
 
       // 3. Create student
       const student = await tx.student.create({
         data: {
           userId: user.id,
           batchId: dto.batchId,
-          stdRegNumber: dto.stdRegNumber,
+          stdRegNumber: dto.stdRegNumber.toUpperCase(),
           firstName: dto.firstName,
           middleName: dto.middleName,
           lastName: dto.lastName,

@@ -3,13 +3,13 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
-import { PrismaService } from '../../../../database/prisma.service'; // adjust path
+import { PrismaService } from '../../../../database/prisma.service';
 import { CreateCourseDto } from '../dto/create-course.dto';
 import { UpdateCourseDto } from '../dto/update-course.dto';
 import { UpdateCourseStatusDto } from '../dto/update-course-status.dto';
 import { QueryCoursesDto } from '../dto/query-courses.dto';
 import { CourseStatus } from '../enums/course-status.enum';
-import { Prisma } from '@/generated/prisma/client'; // adjust
+import { Prisma } from '../../../../generated/prisma/client';
 
 @Injectable()
 export class CoursesService {
@@ -113,25 +113,31 @@ export class CoursesService {
     return this.prisma.course.update({
       where: { id },
       data: { status: dto.status },
-      select: { id: true, code: true, name: true, status: true, updatedAt: true },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        status: true,
+        updatedAt: true,
+      },
     });
   }
 
   async remove(id: string) {
-  await this.findOne(id);
+    await this.findOne(id);
 
-  const [enrollments, allocations] = await Promise.all([
-    this.prisma.courseEnrollment.count({ where: { courseId: id } }),
-    this.prisma.courseAllocation.count({ where: { courseId: id } }),
-  ]);
+    const [enrollments, allocations] = await Promise.all([
+      this.prisma.courseEnrollment.count({ where: { courseId: id } }),
+      this.prisma.courseAllocation.count({ where: { courseId: id } }),
+    ]);
 
-  if (enrollments > 0 || allocations > 0) {
-    throw new ConflictException(
-      'Cannot delete course that has enrollments or allocations. Deactivate it instead.',
-    );
+    if (enrollments > 0 || allocations > 0) {
+      throw new ConflictException(
+        'Cannot delete course that has enrollments or allocations. Deactivate it instead.',
+      );
+    }
+
+    await this.prisma.course.delete({ where: { id } });
+    return { id };
   }
-
-  await this.prisma.course.delete({ where: { id } });
-  return { id };
-}
 }
