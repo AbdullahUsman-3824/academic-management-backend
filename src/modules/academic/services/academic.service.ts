@@ -6,6 +6,7 @@ import { PrismaService } from '../../../database/prisma.service';
 import { AcademicSetupDto } from '../dto/academic-setup.dto';
 import { SetupResponse } from '../types/academic.types';
 import { AcademicSessionResponse } from '../types/academic.types';
+import { AcademicYearStatus } from '../../../generated/prisma/enums';
 
 @Injectable()
 export class AcademicService {
@@ -17,7 +18,7 @@ export class AcademicService {
   ) {}
 
   async setup(dto: AcademicSetupDto): Promise<SetupResponse> {
-    const { sessions, batch, year } = dto;
+    const { sessions, year } = dto;
 
     if (!sessions || sessions.length !== 2) {
       throw new BadRequestException(
@@ -34,6 +35,20 @@ export class AcademicService {
       );
     }
 
+    // ---------- Overlap check for Academic Year (DB se) ----------
+    const overlappingYear = await this.prisma.academicYear.findFirst({
+      where: {
+        AND: [{ startDate: { lt: yearEnd } }, { endDate: { gt: yearStart } }],
+      },
+    });
+
+    if (overlappingYear) {
+      throw new BadRequestException(
+        `Academic year dates overlap with existing year "${overlappingYear.name}" (${overlappingYear.startDate.toISOString().slice(0, 10)} - ${overlappingYear.endDate.toISOString().slice(0, 10)})`,
+      );
+    }
+
+    // ---------- Session validations ----------
     const parsed = sessions.map((s) => ({
       dto: s,
       start: new Date(s.startDate),
@@ -54,10 +69,27 @@ export class AcademicService {
     }
 
     const [first, second] = parsed;
-    const overlaps = first.start < second.end && second.start < first.end;
-    if (overlaps) {
+    const sessionsOverlap =
+      first.start < second.end && second.start < first.end;
+    if (sessionsOverlap) {
       throw new BadRequestException('Academic sessions must not overlap');
     }
+
+    // ---------- Batch auto-generate ----------
+    // name + startDate year se, endDate = startDate + DEGREE_DURATION (years) from env
+    const degreeDurationYears = Number(process.env.DEGREE_DURATION) || 4; // default 4 years
+
+    const batchStartDate = new Date(yearStart); // year ki starting date
+    const batchEndDate = new Date(batchStartDate);
+    batchEndDate.setFullYear(batchEndDate.getFullYear() + degreeDurationYears);
+
+    const batchName = year.name;
+
+    const batchDto = {
+      name: batchName,
+      startDate: batchStartDate.toISOString(),
+      endDate: batchEndDate.toISOString(),
+    };
 
     return this.prisma.$transaction(async (tx) => {
       const academicYear = await this.academicYearService.create(year, tx);
@@ -71,7 +103,7 @@ export class AcademicService {
         academicSessions.push(created);
       }
 
-      const createdBatch = await this.batchService.create(batch, tx);
+      const createdBatch = await this.batchService.create(batchDto, tx);
 
       return { academicYear, academicSessions, batch: createdBatch };
     });
@@ -86,7 +118,7 @@ export class AcademicService {
     ] = await this.prisma.$transaction([
       // Current active academic year
       this.prisma.academicYear.findFirst({
-        where: { status: 'active' },
+        where: { status: AcademicYearStatus.ACTIVE },
         select: {
           id: true,
           name: true,
@@ -98,7 +130,7 @@ export class AcademicService {
 
       // Current active session (can be null)
       this.prisma.academicSession.findFirst({
-        where: { status: 'active' },
+        where: { status: AcademicYearStatus.ACTIVE },
         select: {
           id: true,
           name: true,
@@ -113,7 +145,7 @@ export class AcademicService {
 
       // Active batches count
       this.prisma.batch.count({
-        where: { status: 'active' },
+        where: { status: AcademicYearStatus.ACTIVE },
       }),
     ]);
 

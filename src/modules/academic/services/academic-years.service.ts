@@ -4,7 +4,7 @@ import { CreateAcademicYearDto } from '../dto/create-academic-year.dto';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { UpdateAcademicYearDto } from '../dto/update-academic-year.dto';
 import { AcademicYearResponse } from '../types/academic.types';
-import { AcademicYearStatus } from '../enums/academic-status.enum';
+import { AcademicYearStatus } from '../../../generated/prisma/enums';
 import { Prisma } from '../../../generated/prisma/client';
 
 type TxClient = Prisma.TransactionClient;
@@ -20,8 +20,8 @@ export class AcademicYearsService {
     const run = async (client: TxClient | PrismaService) => {
       try {
         await client.academicYear.updateMany({
-          where: { status: 'active' },
-          data: { status: 'completed' },
+          where: { status: AcademicYearStatus.ACTIVE },
+          data: { status: AcademicYearStatus.COMPLETED },
         });
 
         return await client.academicYear.create({
@@ -29,7 +29,7 @@ export class AcademicYearsService {
             name: data.name,
             startDate: new Date(data.startDate),
             endDate: new Date(data.endDate),
-            status: 'active',
+            status: AcademicYearStatus.ACTIVE,
           },
         });
       } catch (err) {
@@ -53,7 +53,7 @@ export class AcademicYearsService {
 
     return {
       ...academicYear,
-      status: academicYear.status as AcademicYearStatus,
+      status: academicYear.status,
     };
   }
 

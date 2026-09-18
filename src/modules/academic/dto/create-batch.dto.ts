@@ -5,7 +5,7 @@ import {
   IsOptional,
   IsEnum,
 } from 'class-validator';
-import { BatchStatus } from '../enums/academic-status.enum';
+import { BatchStatus } from '../../../generated/prisma/enums';
 
 export class CreateBatchDto {
   @IsString()

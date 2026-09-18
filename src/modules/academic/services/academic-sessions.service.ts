@@ -7,8 +7,8 @@ import { PrismaService } from '../../../database/prisma.service';
 import { UpdateAcademicSessionDto } from '../dto/update-academic-session.dto';
 import { CreateAcademicSessionDto } from '../dto/create-academic-session.dto';
 import { AcademicSessionResponse } from '../types/academic.types';
-import { AcademicSessionStatus } from '../enums/academic-status.enum';
 import { Prisma } from '../../../generated/prisma/client';
+import { AcademicSessionStatus } from '../../../generated/prisma/enums';
 
 type TxClient = Prisma.TransactionClient;
 
@@ -38,13 +38,13 @@ export class AcademicSessionsService {
         name: dto.name,
         startDate: new Date(dto.startDate),
         endDate: new Date(dto.endDate),
-        status: dto.status ?? 'upcoming',
+        status: dto.status ?? AcademicSessionStatus.UPCOMING,
       },
     });
 
     return {
       ...session,
-      status: session.status as AcademicSessionStatus,
+      status: session.status,
     };
   }
 
@@ -115,11 +115,14 @@ export class AcademicSessionsService {
   async activate(id: string) {
     const session = await this.findOne(id);
 
-    if (session.status === 'active') {
+    if (session.status === AcademicSessionStatus.ACTIVE) {
       throw new BadRequestException('Session is already active');
     }
 
-    if (session.status === 'completed' || session.status === 'cancelled') {
+    if (
+      session.status === AcademicSessionStatus.COMPLETED ||
+      session.status === AcademicSessionStatus.CANCELLED
+    ) {
       throw new BadRequestException(
         `Cannot activate a session with status "${session.status}"`,
       );
@@ -129,18 +132,18 @@ export class AcademicSessionsService {
     await this.prisma.academicSession.updateMany({
       where: {
         academicYearId: session.academicYearId,
-        status: 'active',
+        status: AcademicSessionStatus.ACTIVE,
         id: { not: id },
       },
       data: {
-        status: 'completed',
+        status: AcademicSessionStatus.COMPLETED,
       },
     });
 
     return this.prisma.academicSession.update({
       where: { id },
       data: {
-        status: 'active',
+        status: AcademicSessionStatus.ACTIVE,
       },
     });
   }
@@ -148,11 +151,11 @@ export class AcademicSessionsService {
   async complete(id: string) {
     const session = await this.findOne(id);
 
-    if (session.status === 'completed') {
+    if (session.status === AcademicSessionStatus.COMPLETED) {
       throw new BadRequestException('Session is already completed');
     }
 
-    if (session.status !== 'active') {
+    if (session.status !== AcademicSessionStatus.ACTIVE) {
       throw new BadRequestException(
         `Only active sessions can be completed. Current status: "${session.status}"`,
       );
@@ -161,7 +164,7 @@ export class AcademicSessionsService {
     return this.prisma.academicSession.update({
       where: { id },
       data: {
-        status: 'active',
+        status: AcademicSessionStatus.COMPLETED,
       },
     });
   }

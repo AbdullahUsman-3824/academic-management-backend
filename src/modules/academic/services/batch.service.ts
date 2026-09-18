@@ -8,7 +8,7 @@ import {
 import { PrismaService } from '../../../database/prisma.service';
 import { CreateBatchDto } from '../dto/create-batch.dto';
 import { UpdateBatchDto } from '../dto/update-batch.dto';
-import { BatchStatus } from '../enums/academic-status.enum';
+import { BatchStatus } from '../../../generated/prisma/enums';
 import { BatchResponse } from '../types/academic.types';
 
 import { Prisma } from '../../../generated/prisma/client';
@@ -44,7 +44,7 @@ export class BatchService {
           name,
           startDate: start,
           endDate: end,
-          status: status ?? 'active',
+          status: status ?? BatchStatus.ACTIVE,
         },
       });
     } catch (err) {
@@ -62,7 +62,7 @@ export class BatchService {
       name: batch.name,
       startDate: batch.startDate,
       endDate: batch.endDate ?? undefined,
-      status: batch.status as BatchStatus,
+      status: batch.status,
     };
   }
 
@@ -148,11 +148,14 @@ export class BatchService {
   async activate(id: string) {
     const batch = await this.findOne(id);
 
-    if (batch.status === 'active') {
+    if (batch.status === BatchStatus.ACTIVE) {
       throw new BadRequestException('Batch is already active');
     }
 
-    if (batch.status === 'completed' || batch.status === 'cancelled') {
+    if (
+      batch.status === BatchStatus.COMPLETED ||
+      batch.status === BatchStatus.CANCELLED
+    ) {
       throw new BadRequestException(
         `Cannot activate a batch with status "${batch.status}"`,
       );
@@ -161,7 +164,7 @@ export class BatchService {
     return this.prisma.batch.update({
       where: { id },
       data: {
-        status: 'active',
+        status: BatchStatus.ACTIVE,
       },
       include: {
         _count: {

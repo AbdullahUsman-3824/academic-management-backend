@@ -5,7 +5,7 @@ import {
   IsEnum,
   IsOptional,
 } from 'class-validator';
-import { AcademicSessionStatus } from '../enums/academic-status.enum';
+import { AcademicSessionStatus } from '../../../generated/prisma/client';
 
 export class CreateAcademicSessionDto {
   @IsUUID()

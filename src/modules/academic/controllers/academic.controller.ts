@@ -20,7 +20,7 @@ import {
   AcademicYearStatus,
   AcademicSessionStatus,
   BatchStatus,
-} from '../enums/academic-status.enum';
+} from '../../../generated/prisma/enums';
 
 @Controller('academics')
 export class AcademicController {

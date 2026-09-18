@@ -7,7 +7,6 @@ import {
 import { Type } from 'class-transformer';
 import { SessionInSetupDto } from './session-in-setup.dto';
 import { CreateAcademicYearDto } from './create-academic-year.dto';
-import { CreateBatchDto } from './create-batch.dto';
 
 export class AcademicSetupDto {
   @ValidateNested()
@@ -20,8 +19,4 @@ export class AcademicSetupDto {
   @ValidateNested({ each: true })
   @Type(() => SessionInSetupDto)
   sessions!: SessionInSetupDto[];
-
-  @ValidateNested()
-  @Type(() => CreateBatchDto)
-  batch!: CreateBatchDto;
 }

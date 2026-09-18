@@ -2,7 +2,7 @@ import {
   AcademicYearStatus,
   AcademicSessionStatus,
   BatchStatus,
-} from '../enums/academic-status.enum';
+} from '../../../generated/prisma/client';
 
 export interface AcademicYearResponse {
   id: string;
