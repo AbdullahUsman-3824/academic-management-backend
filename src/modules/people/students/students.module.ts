@@ -1,10 +1,18 @@
 import { Module } from '@nestjs/common';
+
 import { StudentsController } from './controllers/students.controller';
 import { StudentsService } from './services/students.service';
+
+
+
 import { DatabaseModule } from '../../../database/database.module';
+import { UserModule } from '../../user/user.module'; // adjust path
 
 @Module({
-  imports: [DatabaseModule],
+  imports: [
+    DatabaseModule,
+    UserModule,
+  ],
   controllers: [StudentsController],
   providers: [StudentsService],
   exports: [StudentsService],

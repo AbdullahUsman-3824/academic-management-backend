@@ -115,11 +115,11 @@ export class AcademicSessionsService {
   async activate(id: string) {
     const session = await this.findOne(id);
 
-    if (session.status === 'ACTIVE') {
+    if (session.status === 'active') {
       throw new BadRequestException('Session is already active');
     }
 
-    if (session.status === 'COMPLETED' || session.status === 'CANCELLED') {
+    if (session.status === 'completed' || session.status === 'cancelled') {
       throw new BadRequestException(
         `Cannot activate a session with status "${session.status}"`,
       );
@@ -129,18 +129,18 @@ export class AcademicSessionsService {
     await this.prisma.academicSession.updateMany({
       where: {
         academicYearId: session.academicYearId,
-        status: 'ACTIVE',
+        status: 'active',
         id: { not: id },
       },
       data: {
-        status: 'COMPLETED',
+        status: 'completed',
       },
     });
 
     return this.prisma.academicSession.update({
       where: { id },
       data: {
-        status: 'ACTIVE',
+        status: 'active',
       },
     });
   }
@@ -148,11 +148,11 @@ export class AcademicSessionsService {
   async complete(id: string) {
     const session = await this.findOne(id);
 
-    if (session.status === 'COMPLETED') {
+    if (session.status === 'completed') {
       throw new BadRequestException('Session is already completed');
     }
 
-    if (session.status !== 'ACTIVE') {
+    if (session.status !== 'active') {
       throw new BadRequestException(
         `Only active sessions can be completed. Current status: "${session.status}"`,
       );
@@ -161,7 +161,7 @@ export class AcademicSessionsService {
     return this.prisma.academicSession.update({
       where: { id },
       data: {
-        status: 'COMPLETED',
+        status: 'active',
       },
     });
   }

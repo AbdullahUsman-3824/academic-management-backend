@@ -5,8 +5,8 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../../database/prisma.service';
-import { UserService } from '@/modules/user/user.service';
-import { RoleService } from '@/modules/user/role/role.service';
+import { UserService } from '../../../user/user.service';
+import { RoleService } from '../../../user/role/role.service';
 import { CreateStudentDto } from '../dto/create-student.dto';
 import { UpdateStudentDto } from '../dto/update-student.dto';
 import { UpdateStudentStatusDto } from '../dto/update-student-status.dto';
@@ -18,7 +18,7 @@ import type {
   StudentListItem,
   PaginatedStudents,
 } from '../types/student.types';
-import { Prisma } from '@/generated/prisma/client';
+import { Prisma } from '../../../../generated/prisma/client';
 import type { CellValue } from 'exceljs';
 
 type StudentWithRelations = Prisma.StudentGetPayload<{
@@ -71,7 +71,7 @@ export class StudentsService {
       // 2. Create user
       const user = await this.userService.create(
         {
-          username: dto.stdRegNumber,
+          username: dto.stdRegNumber.toLowerCase(),
           password: defaultPassword,
           roleId: studentRole.id,
         },
@@ -83,7 +83,7 @@ export class StudentsService {
         data: {
           userId: user.id,
           batchId: dto.batchId,
-          stdRegNumber: dto.stdRegNumber,
+          stdRegNumber: dto.stdRegNumber.toUpperCase(),
           firstName: dto.firstName,
           middleName: dto.middleName,
           lastName: dto.lastName,
@@ -121,29 +121,32 @@ export class StudentsService {
     const skip = (page - 1) * limit;
 
     const search = query.search?.trim();
+    const hasSearch = !!search && search.length >= 2;
 
     const where: Prisma.StudentWhereInput = {
       ...(query.status && { status: query.status }),
       ...(query.batchId && { batchId: query.batchId }),
-      ...(search &&
-        search.length >= 2 && {
-          OR: [
-            { firstName: { contains: search, mode: 'insensitive' } },
-            { middleName: { contains: search, mode: 'insensitive' } },
-            { lastName: { contains: search, mode: 'insensitive' } },
-            { stdRegNumber: { contains: search, mode: 'insensitive' } },
-            { email: { contains: search, mode: 'insensitive' } },
-            { phone: { contains: search, mode: 'insensitive' } },
-            {
-              user: {
+      ...(hasSearch && {
+        OR: [
+          { firstName: { contains: search, mode: 'insensitive' } },
+          { middleName: { contains: search, mode: 'insensitive' } },
+          { lastName: { contains: search, mode: 'insensitive' } },
+          { stdRegNumber: { contains: search, mode: 'insensitive' } },
+          { email: { contains: search, mode: 'insensitive' } },
+          { phone: { contains: search, mode: 'insensitive' } },
+          {
+            user: {
+              is: {
                 username: { contains: search, mode: 'insensitive' },
               },
             },
-          ],
-        }),
+          },
+        ],
+      }),
     };
 
-    const [rows, total] = await this.prisma.$transaction([
+    // Parallel instead of transaction (thoda faster)
+    const [rows, total] = await Promise.all([
       this.prisma.student.findMany({
         where,
         skip,
