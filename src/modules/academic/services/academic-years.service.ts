@@ -1,7 +1,11 @@
 import { PrismaService } from '../../../database/prisma.service';
 import { ConflictException } from '@nestjs/common/exceptions/conflict.exception';
 import { CreateAcademicYearDto } from '../dto/create-academic-year.dto';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { UpdateAcademicYearDto } from '../dto/update-academic-year.dto';
 import { AcademicYearResponse } from '../types/academic.types';
 import { AcademicYearStatus } from '../../../generated/prisma/enums';
@@ -58,6 +62,12 @@ export class AcademicYearsService {
   }
 
   async findAll(status?: AcademicYearStatus) {
+    if (status && !Object.values(AcademicYearStatus).includes(status)) {
+      throw new BadRequestException(
+        `Invalid status "${status}". Allowed values: ${Object.values(AcademicYearStatus).join(', ')}`,
+      );
+    }
+
     return this.prisma.academicYear.findMany({
       where: {
         ...(status && { status }),

@@ -54,6 +54,12 @@ export class AcademicSessionsService {
   }) {
     const { status, academicYearId } = params || {};
 
+    if (status && !Object.values(AcademicSessionStatus).includes(status)) {
+      throw new BadRequestException(
+        `Invalid status "${status}". Allowed values: ${Object.values(AcademicSessionStatus).join(', ')}`,
+      );
+    }
+
     return this.prisma.academicSession.findMany({
       where: {
         ...(status && { status }),

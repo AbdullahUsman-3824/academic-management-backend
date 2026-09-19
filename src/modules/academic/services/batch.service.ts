@@ -67,6 +67,11 @@ export class BatchService {
   }
 
   async findAll(status?: BatchStatus) {
+    if (status && !Object.values(BatchStatus).includes(status)) {
+      throw new BadRequestException(
+        `Invalid status "${status}". Allowed values: ${Object.values(BatchStatus).join(', ')}`,
+      );
+    }
     return this.prisma.batch.findMany({
       where: {
         ...(status && { status }),
