@@ -29,7 +29,7 @@ model CourseEnrollment {
   droppedAt               DateTime? @map("dropped_at")
   createdAt               DateTime  @default(now()) @map("created_at")
   updatedAt               DateTime? @updatedAt @map("updated_at")
-                                               
+
   studentAcademicRecord StudentAcademicRecord @relation(fields: [studentAcademicRecordId], references: [id])
   course                Course                @relation(fields: [courseId], references: [id])
   courseResults         StudentCourseResult[]

@@ -34,9 +34,15 @@ model Student {
 
   user            User                    @relation(fields: [userId], references: [id])
   batch           Batch                   @relation(fields: [batchId], references: [id])
+
+  sectionId   String?  @map("section_id") @db.Uuid
+  section     Section? @relation(fields: [sectionId], references: [id])
+  
   academicRecords StudentAcademicRecord[]
   marks           StudentMark[]
   courseResults   StudentCourseResult[]
+
+  
 
   @@index([batchId])
   @@index([status])

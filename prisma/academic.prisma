@@ -72,20 +72,29 @@ model Batch {
   status    BatchStatus @default(ACTIVE)
 
   students Student[]
+  sections  Section[]
+
+  sectionCapacity  Int?     @map("section_capacity")  // e.g. 40
 
   @@map("batches")
 }
 
 model Section {
-  id        String        @id @default(uuid()) @db.Uuid
-  name      String // e.g. A | B | C
-  status    SectionStatus @default(ACTIVE)
-  createdAt DateTime      @default(now()) @map("created_at")
-  updatedAt DateTime?     @updatedAt @map("updated_at")
+  id          String        @id @default(uuid()) @db.Uuid
+  batchId     String        @map("batch_id") @db.Uuid
+  name        String
+  isDefault   Boolean       @default(false) @map("is_default")
+  status      SectionStatus @default(ACTIVE)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
 
-  studentAcademicRecords StudentAcademicRecord[]
-  courseAllocations      CourseAllocation[]
+  // Relations
+  batch             Batch                    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  students          Student[]
+  studentRecords    StudentAcademicRecord[]
+  courseAllocations CourseAllocation[]
 
+  @@unique([batchId, name])
   @@map("sections")
 }
 

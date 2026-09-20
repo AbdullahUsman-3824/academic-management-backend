@@ -16,6 +16,7 @@ import { ResultsModule } from './modules/assessments/results/results.module';
 import { GradeScalesModule } from './modules/assessments/grade-scales/grade-scales.module';
 // import { AcademicYearsModule } from './modules/academics/academic-years/academic-years.module';
 import { AcademicModule } from './modules/academic/academic.module';
+import { SectionsModule } from './modules/sections/sections.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { AcademicModule } from './modules/academic/academic.module';
     ResultsModule,
     GradeScalesModule,
     AcademicModule,
+    SectionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
