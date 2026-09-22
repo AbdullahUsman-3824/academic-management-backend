@@ -1,9 +1,11 @@
 import {
   IsString,
   IsNotEmpty,
-  IsDateString,
   IsOptional,
   IsEnum,
+  IsInt,
+  IsUUID,
+  Min,
 } from 'class-validator';
 import { BatchStatus } from '../../../generated/prisma/enums';
 
@@ -12,13 +14,19 @@ export class CreateBatchDto {
   @IsNotEmpty()
   name!: string;
 
-  @IsDateString()
+  @IsUUID()
   @IsNotEmpty()
-  startDate!: string;
+  entryYearId!: string;
 
-  @IsDateString()
   @IsOptional()
-  endDate?: string;
+  @IsInt()
+  @Min(1)
+  programDuration?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  sectionCapacity?: number;
 
   @IsOptional()
   @IsEnum(BatchStatus)

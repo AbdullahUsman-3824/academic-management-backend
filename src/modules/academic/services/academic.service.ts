@@ -75,22 +75,6 @@ export class AcademicService {
       throw new BadRequestException('Academic sessions must not overlap');
     }
 
-    // ---------- Batch auto-generate ----------
-    // name + startDate year se, endDate = startDate + DEGREE_DURATION (years) from env
-    const degreeDurationYears = Number(process.env.DEGREE_DURATION) || 4; // default 4 years
-
-    const batchStartDate = new Date(yearStart); // year ki starting date
-    const batchEndDate = new Date(batchStartDate);
-    batchEndDate.setFullYear(batchEndDate.getFullYear() + degreeDurationYears);
-
-    const batchName = year.name;
-
-    const batchDto = {
-      name: batchName,
-      startDate: batchStartDate.toISOString(),
-      endDate: batchEndDate.toISOString(),
-    };
-
     return this.prisma.$transaction(async (tx) => {
       const academicYear = await this.academicYearService.create(year, tx);
 
@@ -103,7 +87,13 @@ export class AcademicService {
         academicSessions.push(created);
       }
 
-      const createdBatch = await this.batchService.create(batchDto, tx);
+      const createdBatch = await this.batchService.create(
+        {
+          name: academicYear.name,
+          entryYearId: academicYear.id,
+        },
+        tx,
+      );
 
       return { academicYear, academicSessions, batch: createdBatch };
     });

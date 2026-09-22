@@ -9,41 +9,60 @@ import { PrismaService } from '../../../database/prisma.service';
 import { CreateBatchDto } from '../dto/create-batch.dto';
 import { UpdateBatchDto } from '../dto/update-batch.dto';
 import { BatchStatus } from '../../../generated/prisma/enums';
-import { BatchResponse } from '../types/academic.types';
-
 import { Prisma } from '../../../generated/prisma/client';
+import { MappedBatchResponse } from '../types/academic.types';
 
 type TxClient = Prisma.TransactionClient;
-type BatchRecord = Prisma.BatchGetPayload<Record<string, never>>;
 
-// import { UpdateBatchDto } from '../dto/update-batch.dto';
-// import { BatchResponseDto } from '../dto/batch-response.dto';
+const DEFAULT_PROGRAM_DURATION = process.env.DEFAULT_PROGRAM_DURATION
+  ? parseInt(process.env.DEFAULT_PROGRAM_DURATION, 10)
+  : 4;
+
+const DEFAULT_SECTION_CAPACITY = process.env.DEFAULT_SECTION_CAPACITY
+  ? parseInt(process.env.DEFAULT_SECTION_CAPACITY, 10)
+  : 100;
+
+const BATCH_WITH_RELATIONS = {
+  entryYear: true,
+  _count: {
+    select: { students: true, sections: true },
+  },
+} as const;
+
+type BatchWithRelations = Prisma.BatchGetPayload<{
+  include: {
+    entryYear: true;
+    _count: { select: { students: true; sections: true } };
+  };
+}>;
 
 @Injectable()
 export class BatchService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(
-    createBatchDto: CreateBatchDto,
-    tx?: TxClient,
-  ): Promise<BatchResponse> {
-    const { name, startDate, endDate, status } = createBatchDto;
+  async create(createBatchDto: CreateBatchDto, tx?: TxClient) {
+    const { name, entryYearId, programDuration, sectionCapacity, status } =
+      createBatchDto;
+
     const client = tx ?? this.prisma;
 
-    const start = new Date(startDate);
-    const end = endDate ? new Date(endDate) : undefined;
-
-    if (end && end <= start) {
-      throw new BadRequestException('End date must be after start date');
+    // Ensure the referenced AcademicYear exists
+    const entryYear = await client.academicYear.findUnique({
+      where: { id: entryYearId },
+    });
+    if (!entryYear) {
+      throw new NotFoundException(
+        `AcademicYear with ID "${entryYearId}" not found`,
+      );
     }
 
-    let batch: BatchRecord;
     try {
-      batch = await client.batch.create({
+      return await client.batch.create({
         data: {
           name,
-          startDate: start,
-          endDate: end,
+          entryYearId,
+          programDuration: programDuration ?? DEFAULT_PROGRAM_DURATION,
+          sectionCapacity: sectionCapacity ?? DEFAULT_SECTION_CAPACITY,
           status: status ?? BatchStatus.ACTIVE,
         },
       });
@@ -56,101 +75,112 @@ export class BatchService {
       }
       throw err;
     }
-
-    return {
-      id: batch.id,
-      name: batch.name,
-      startDate: batch.startDate,
-      endDate: batch.endDate ?? undefined,
-      status: batch.status,
-    };
   }
 
-  async findAll(status?: BatchStatus) {
+  async findAll(status?: BatchStatus): Promise<MappedBatchResponse[]> {
     if (status && !Object.values(BatchStatus).includes(status)) {
       throw new BadRequestException(
         `Invalid status "${status}". Allowed values: ${Object.values(BatchStatus).join(', ')}`,
       );
     }
-    return this.prisma.batch.findMany({
+
+    const batches = await this.prisma.batch.findMany({
       where: {
         ...(status && { status }),
       },
       orderBy: {
-        startDate: 'desc',
+        createdAt: 'desc',
       },
-      include: {
-        _count: {
-          select: { students: true },
-        },
-      },
+      include: BATCH_WITH_RELATIONS,
     });
+
+    return batches.map((batch) => this.toBatchResponse(batch));
   }
 
-  async findOne(id: string) {
+  async findOne(id: string): Promise<MappedBatchResponse> {
     const batch = await this.prisma.batch.findUnique({
       where: { id },
-      include: {
-        _count: {
-          select: { students: true },
-        },
-      },
+      include: BATCH_WITH_RELATIONS,
     });
 
     if (!batch) {
       throw new NotFoundException(`Batch with ID "${id}" not found`);
     }
 
-    return batch;
+    return this.toBatchResponse(batch);
   }
 
-  async update(id: string, dto: UpdateBatchDto) {
+  /**
+   * Maps a Batch (with entryYear) → MappedBatchResponse
+   * startDate = entryYear.startDate
+   * endDate   = entryYear.startDate + programDuration years
+   */
+  private toBatchResponse(batch: BatchWithRelations): MappedBatchResponse {
+    const startDate = batch.entryYear.startDate;
+
+    const endDate = new Date(startDate);
+    endDate.setFullYear(endDate.getFullYear() + batch.programDuration);
+
+    return {
+      id: batch.id,
+      name: batch.name,
+      entryYearId: batch.entryYearId,
+      startDate,
+      endDate,
+      status: batch.status,
+      counts: batch._count,
+    };
+  }
+
+  async update(id: string, dto: UpdateBatchDto): Promise<MappedBatchResponse> {
     await this.findOne(id);
 
-    // Check name uniqueness
+    // Name uniqueness check
     if (dto.name) {
       const existing = await this.prisma.batch.findUnique({
         where: { name: dto.name },
       });
-
       if (existing && existing.id !== id) {
         throw new ConflictException(`Batch "${dto.name}" already exists`);
       }
     }
 
-    // Validate dates
-    if (dto.startDate && dto.endDate) {
-      const start = new Date(dto.startDate);
-      const end = new Date(dto.endDate);
-
-      if (end <= start) {
-        throw new BadRequestException('End date must be after start date');
+    // Validate entryYearId if provided
+    if (dto.entryYearId) {
+      const entryYear = await this.prisma.academicYear.findUnique({
+        where: { id: dto.entryYearId },
+      });
+      if (!entryYear) {
+        throw new NotFoundException(
+          `AcademicYear with ID "${dto.entryYearId}" not found`,
+        );
       }
     }
 
     const data: Prisma.BatchUpdateInput = {
       ...(dto.name !== undefined && { name: dto.name }),
-      ...(dto.startDate !== undefined && {
-        startDate: new Date(dto.startDate),
+      ...(dto.entryYearId !== undefined && {
+        entryYear: { connect: { id: dto.entryYearId } },
       }),
-      ...(dto.endDate !== undefined && {
-        endDate: dto.endDate ? new Date(dto.endDate) : null,
+      ...(dto.programDuration !== undefined && {
+        programDuration: dto.programDuration,
+      }),
+      ...(dto.sectionCapacity !== undefined && {
+        sectionCapacity: dto.sectionCapacity,
       }),
       ...(dto.status !== undefined && { status: dto.status }),
     };
 
-    return this.prisma.batch.update({
+    const updated = await this.prisma.batch.update({
       where: { id },
       data,
-      include: {
-        _count: {
-          select: { students: true },
-        },
-      },
+      include: BATCH_WITH_RELATIONS,
     });
+
+    return this.toBatchResponse(updated);
   }
 
-  async activate(id: string) {
+  async activate(id: string): Promise<MappedBatchResponse> {
     const batch = await this.findOne(id);
 
     if (batch.status === BatchStatus.ACTIVE) {
@@ -166,16 +196,14 @@ export class BatchService {
       );
     }
 
-    return this.prisma.batch.update({
+    const activated = await this.prisma.batch.update({
       where: { id },
       data: {
         status: BatchStatus.ACTIVE,
       },
-      include: {
-        _count: {
-          select: { students: true },
-        },
-      },
+      include: BATCH_WITH_RELATIONS,
     });
+
+    return this.toBatchResponse(activated);
   }
 }
