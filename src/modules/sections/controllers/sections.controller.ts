@@ -65,8 +65,7 @@ export class SectionsController {
   }
 
   @Post('reset')
-resetAllSections(@Param('batchId', ParseUUIDPipe) batchId: string) {
-  return this.sectionsService.resetAllSections(batchId);
-}
-
+  resetAllSections(@Param('batchId', ParseUUIDPipe) batchId: string) {
+    return this.sectionsService.resetAllSections(batchId);
+  }
 }

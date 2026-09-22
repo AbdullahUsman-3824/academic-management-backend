@@ -56,11 +56,13 @@ model AcademicSession {
   startDate      DateTime              @map("start_date") @db.Date
   endDate        DateTime              @map("end_date") @db.Date
   status         AcademicSessionStatus @default(UPCOMING)
+  progressed     Boolean               @default(false)
 
   academicYear           AcademicYear            @relation(fields: [academicYearId], references: [id])
   studentAcademicRecords StudentAcademicRecord[]
   courseAllocations      CourseAllocation[]
   courseResults          StudentCourseResult[]
+  academicProgressions   AcademicProgression[]
 
   @@map("academic_sessions")
 }

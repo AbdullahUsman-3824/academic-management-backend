@@ -68,10 +68,7 @@ export class SectionsService {
     const students = await this.prisma.student.findMany({
       where: {
         batchId,
-        OR: [
-          { sectionId: defaultSection.id },
-          { sectionId: null },
-        ],
+        OR: [{ sectionId: defaultSection.id }, { sectionId: null }],
         status: 'active',
       },
       select: {
@@ -124,7 +121,9 @@ export class SectionsService {
     });
 
     if (unassignedStudents.length === 0) {
-      throw new BadRequestException('No unassigned students found in this batch');
+      throw new BadRequestException(
+        'No unassigned students found in this batch',
+      );
     }
 
     const totalStudents = unassignedStudents.length;
@@ -134,13 +133,19 @@ export class SectionsService {
       String.fromCharCode(65 + i),
     );
 
-    const createdSections: { id: string; name: string; studentCount: number }[] = [];
+    const createdSections: {
+      id: string;
+      name: string;
+      studentCount: number;
+    }[] = [];
 
     await this.prisma.$transaction(async (tx) => {
       for (let i = 0; i < numberOfSections; i++) {
         const start = i * capacity;
         const end = start + capacity;
-        const studentIds = unassignedStudents.slice(start, end).map((s) => s.id);
+        const studentIds = unassignedStudents
+          .slice(start, end)
+          .map((s) => s.id);
 
         const newSection = await tx.section.create({
           data: {
@@ -170,7 +175,6 @@ export class SectionsService {
           studentCount: studentIds.length,
         });
       }
-
     });
 
     return {
@@ -196,7 +200,11 @@ export class SectionsService {
       throw new BadRequestException('A student cannot be in multiple sections');
     }
 
-    const createdSections: { id: string; name: string; studentCount: number }[] = [];
+    const createdSections: {
+      id: string;
+      name: string;
+      studentCount: number;
+    }[] = [];
 
     await this.prisma.$transaction(async (tx) => {
       for (const sec of dto.sections) {
@@ -228,7 +236,6 @@ export class SectionsService {
           studentCount: sec.studentIds.length,
         });
       }
-
     });
 
     return {
@@ -238,49 +245,50 @@ export class SectionsService {
   }
 
   // ─────────────────────────────────────────────
-// Reset all sections → move everyone to default
-// ─────────────────────────────────────────────
-async resetAllSections(batchId: string) {
-  const batch = await this.prisma.batch.findUnique({
-    where: { id: batchId },
-  });
+  // Reset all sections → move everyone to default
+  // ─────────────────────────────────────────────
+  async resetAllSections(batchId: string) {
+    const batch = await this.prisma.batch.findUnique({
+      where: { id: batchId },
+    });
 
-  if (!batch) {
-    throw new NotFoundException('Batch not found');
+    if (!batch) {
+      throw new NotFoundException('Batch not found');
+    }
+
+    const defaultSection = await this.ensureDefaultSection(batchId);
+
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Move ALL students of this batch to default section
+      await tx.student.updateMany({
+        where: { batchId },
+        data: { sectionId: defaultSection.id },
+      });
+
+      // 2. Update current academic records as well
+      await tx.studentAcademicRecord.updateMany({
+        where: {
+          student: { batchId },
+          status: 'ENROLLED',
+        },
+        data: { sectionId: defaultSection.id },
+      });
+
+      // 3. Soft-delete all real sections of this batch
+      await tx.section.updateMany({
+        where: {
+          batchId,
+          isDefault: false,
+        },
+        data: { status: 'INACTIVE' },
+      });
+
+      return {
+        message:
+          'All sections removed. All students moved back to default section.',
+      };
+    });
   }
-
-  const defaultSection = await this.ensureDefaultSection(batchId);
-
-  return this.prisma.$transaction(async (tx) => {
-    // 1. Move ALL students of this batch to default section
-    await tx.student.updateMany({
-      where: { batchId },
-      data: { sectionId: defaultSection.id },
-    });
-
-    // 2. Update current academic records as well
-    await tx.studentAcademicRecord.updateMany({
-      where: {
-        student: { batchId },
-        status: 'ENROLLED',
-      },
-      data: { sectionId: defaultSection.id },
-    });
-
-    // 3. Soft-delete all real sections of this batch
-    await tx.section.updateMany({
-      where: {
-        batchId,
-        isDefault: false,
-      },
-      data: { status: 'INACTIVE' },
-    });
-
-    return {
-      message: 'All sections removed. All students moved back to default section.',
-    };
-  });
-}
 
   // ─────────────────────────────────────────────
   // Move students between sections (bulk)
@@ -300,7 +308,9 @@ async resetAllSections(batchId: string) {
 
     // Capacity check (only for real sections)
     if (!targetSection.isDefault) {
-      const batch = await this.prisma.batch.findUnique({ where: { id: batchId } });
+      const batch = await this.prisma.batch.findUnique({
+        where: { id: batchId },
+      });
       if (batch?.sectionCapacity) {
         const currentCount = await this.prisma.student.count({
           where: { sectionId: dto.targetSectionId },
@@ -348,7 +358,9 @@ async resetAllSections(batchId: string) {
     });
 
     if (!section) {
-      throw new NotFoundException('Section not found or it is the default section');
+      throw new NotFoundException(
+        'Section not found or it is the default section',
+      );
     }
 
     const defaultSection = await this.ensureDefaultSection(batchId);

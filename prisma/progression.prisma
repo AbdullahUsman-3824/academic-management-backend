@@ -1,0 +1,72 @@
+// ====================== ENUMS ======================
+
+enum ProgressionStatus {
+    draft
+    with_record_done
+    semester_assigned
+    sections_assigned
+    final_preview
+    locked
+    cancelled
+}
+
+// ====================== MODEL ======================
+
+model AcademicProgression {
+    id String @id @default(uuid())
+
+    // Relation with Academic Session
+    academicSessionId String            @db.Uuid
+    academicSession   AcademicSession   @relation(fields: [academicSessionId], references: [id])
+    status            ProgressionStatus @default(draft)
+    currentStep       String? // e.g. "preview", "with_record", "semester", "sections", "final_preview"
+
+    // ========== Decisions (stored as JSON) ==========
+
+    // Students who already have academic record
+    // Example:
+    // {
+    //   "mode": "auto" | "manual",
+    //   "adjustments": [
+    //     { "studentId": "...", "toSemester": 5, "reason": "..." }
+    //   ]
+    // }
+    withRecordDecision Json?
+
+    // Students without previous academic record (new / lateral)
+    // Example:
+    // {
+    //   "defaultSemester": 1,
+    //   "batchOverrides": [
+    //     { "batchId": "...", "semester": 3 }
+    //   ],
+    //   "studentOverrides": [
+    //     { "studentId": "...", "semester": 4 }
+    //   ]
+    // }
+    withoutRecordDecision Json?
+
+    // Section assignment decision
+    // Example:
+    // {
+    //   "strategy": "single" | "split_50_50" | "custom",
+    //   "details": { ... }   // only if custom
+    // }
+    sectionDecision Json?
+
+    // Optional: last calculated preview (for performance)
+    previewCache Json?
+
+    // ========== Meta ==========
+    createdById String?
+    createdBy   User?   @relation(fields: [createdById], references: [id])
+
+    createdAt DateTime  @default(now())
+    updatedAt DateTime  @updatedAt
+    lockedAt  DateTime?
+
+    // Indexes
+    @@index([academicSessionId])
+    @@index([status])
+    @@map("academic_progressions")
+}
