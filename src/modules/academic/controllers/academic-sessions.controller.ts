@@ -11,6 +11,7 @@ import {
 import { AcademicSessionsService } from '../services/academic-sessions.service';
 import { UpdateAcademicSessionDto } from '../dto/update-academic-session.dto';
 import { AcademicSessionStatus } from '../../../generated/prisma/enums';
+import { CreateAcademicSessionDto } from '../dto/create-academic-session.dto';
 
 @Controller('academics/sessions')
 export class AcademicSessionController {
@@ -51,4 +52,9 @@ export class AcademicSessionController {
   completeSession(@Param('id', ParseUUIDPipe) id: string) {
     return this.sessionService.complete(id);
   }
+
+  @Post()
+createSession(@Body() dto: CreateAcademicSessionDto) {
+  return this.sessionService.create(dto);
+}
 }

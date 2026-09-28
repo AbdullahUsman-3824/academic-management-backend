@@ -19,9 +19,9 @@ export class PrismaService
     // pehle pool banao (this use kiye baghair)
     const pool = new Pool({
       connectionString,
-      max: 10,
+      max: 20, // Increased from 10 to 20
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
+      connectionTimeoutMillis: 15000, // Increased from 5000 to 15000 (15 seconds)
     });
 
     const adapter = new PrismaPg(pool);

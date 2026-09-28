@@ -11,7 +11,7 @@ import { BatchService } from './services/batch.service';
 import { AcademicProgressionService } from './services/academic-progression.service';
 import { SectionService } from './services/section.service';
 import { DatabaseModule } from '../../database/database.module';
-
+import { SectionsController } from './controllers/sections.controller';
 @Module({
   imports: [DatabaseModule],
   controllers: [
@@ -20,6 +20,7 @@ import { DatabaseModule } from '../../database/database.module';
     AcademicSessionController,
     AcademicBatchController,
     AcademicProgressionController,
+    SectionsController
   ],
   providers: [
     AcademicService,
@@ -28,6 +29,7 @@ import { DatabaseModule } from '../../database/database.module';
     BatchService,
     AcademicProgressionService,
     SectionService,
+
   ],
   exports: [
     AcademicService,

@@ -8,7 +8,7 @@ import {
   AutoCreateSectionsDto,
   MoveStudentsDto,
   ManualAssignDto,
-} from '../dto/section.dto';
+} from '../../academic/dto/section.dto';
 
 @Injectable()
 export class SectionsService {

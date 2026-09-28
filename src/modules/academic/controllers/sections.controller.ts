@@ -7,65 +7,68 @@ import {
   Param,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import { SectionsService } from '../services/sections.service';
+import { SectionService } from '../services/section.service';
 import {
   AutoCreateSectionsDto,
   MoveStudentsDto,
   ManualAssignDto,
-} from '../../academic/dto/section.dto';
+} from '../dto/section.dto'; // adjust path if you moved the DTOs
 
 @Controller('batches/:batchId/sections')
 export class SectionsController {
-  constructor(private readonly sectionsService: SectionsService) {}
+  constructor(private readonly sectionService: SectionService) {}
 
+  // 1. List real sections of a batch
   @Get()
   list(@Param('batchId', ParseUUIDPipe) batchId: string) {
-    return this.sectionsService.listSections(batchId);
+    return this.sectionService.listSections(batchId);
   }
 
+  // 2. Students still in default section
   @Get('students-in-default')
   studentsInDefault(@Param('batchId', ParseUUIDPipe) batchId: string) {
-    return this.sectionsService.getStudentsInDefault(batchId);
+    return this.sectionService.getStudentsInDefault(batchId);
   }
 
-  // Automatic creation
+  // 3. Auto create sections by capacity
   @Post('auto')
   autoCreate(
     @Param('batchId', ParseUUIDPipe) batchId: string,
     @Body() dto: AutoCreateSectionsDto,
   ) {
-    return this.sectionsService.autoCreateSections(batchId, dto);
+    return this.sectionService.autoCreateSections(batchId, dto);
   }
 
-  // Manual creation
+  // 4. Manual create + assign sections
   @Post('manual')
   manualAssign(
     @Param('batchId', ParseUUIDPipe) batchId: string,
     @Body() dto: ManualAssignDto,
   ) {
-    return this.sectionsService.manualAssign(batchId, dto);
+    return this.sectionService.manualAssign(batchId, dto);
   }
 
-  // Bulk move students
+  // 5. Move students between sections
   @Post('move-students')
   moveStudents(
     @Param('batchId', ParseUUIDPipe) batchId: string,
     @Body() dto: MoveStudentsDto,
   ) {
-    return this.sectionsService.moveStudents(batchId, dto);
+    return this.sectionService.moveStudents(batchId, dto);
   }
 
-  // Delete section → students go back to default
+  // 6. Delete one section (students go back to default)
   @Delete(':sectionId')
   deleteSection(
     @Param('batchId', ParseUUIDPipe) batchId: string,
     @Param('sectionId', ParseUUIDPipe) sectionId: string,
   ) {
-    return this.sectionsService.deleteSection(batchId, sectionId);
+    return this.sectionService.deleteSection(batchId, sectionId);
   }
 
+  // 7. Reset all sections of a batch
   @Post('reset')
   resetAllSections(@Param('batchId', ParseUUIDPipe) batchId: string) {
-    return this.sectionsService.resetAllSections(batchId);
+    return this.sectionService.resetAllSections(batchId);
   }
 }

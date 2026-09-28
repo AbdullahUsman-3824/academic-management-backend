@@ -53,7 +53,13 @@ export class AcademicYearsService {
     // don't nest another $transaction. Otherwise wrap standalone calls atomically.
     const academicYear = tx
       ? await run(tx)
-      : await this.prisma.$transaction((trx) => run(trx));
+      : await this.prisma.$transaction(
+          async (trx) => run(trx),
+          {
+            maxWait: 10000, // 10 seconds max wait to acquire connection
+            timeout: 20000, // 20 seconds transaction timeout
+          },
+        );
 
     return {
       ...academicYear,

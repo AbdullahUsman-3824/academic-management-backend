@@ -13,7 +13,7 @@ enum ProgressionStatus {
 // ====================== MODEL ======================
 
 model AcademicProgression {
-    id String @id @default(uuid())
+    id String @id @default(uuid())  @db.Uuid
 
     // Relation with Academic Session
     academicSessionId String            @db.Uuid
@@ -58,8 +58,8 @@ model AcademicProgression {
     previewCache Json?
 
     // ========== Meta ==========
-    createdById String?
-    createdBy   User?   @relation(fields: [createdById], references: [id])
+createdById String? @db.Uuid
+createdBy   User? @relation(fields: [createdById], references: [id])
 
     createdAt DateTime  @default(now())
     updatedAt DateTime  @updatedAt

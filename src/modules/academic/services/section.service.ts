@@ -9,7 +9,7 @@ import {
   AutoCreateSectionsDto,
   MoveStudentsDto,
   ManualAssignDto,
-} from '../../sections/dto/section.dto';
+} from '../dto/section.dto';
 import { SectionStrategy } from '../dto/assign-sections.dto';
 
 // Progression aur direct API calls dono se accept ho sake, is liye union type
