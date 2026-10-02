@@ -9,21 +9,34 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { AcademicSessionsService } from '../services/academic-sessions.service';
-import { UpdateAcademicSessionDto } from '../dto/update-academic-session.dto';
 import { AcademicSessionStatus } from '../../../generated/prisma/enums';
-import { CreateAcademicSessionDto } from '../dto/create-academic-session.dto';
+import {
+  CreateAcademicSessionDto,
+  UpdateAcademicSessionDto,
+} from '../dto/academic-session.dto';
 
 @Controller('academics/sessions')
 export class AcademicSessionController {
   constructor(private readonly sessionService: AcademicSessionsService) {}
 
-  // GET /academics/sessions?status=upcoming|active|completed|cancelled&academicYearId=uuid
+  // GET /academics/sessions?status=...&academicYearId=...
   @Get()
   findAllSessions(
+    @Query('academicYearId', new ParseUUIDPipe({ optional: true }))
+    academicYearId?: string,
     @Query('status') status?: AcademicSessionStatus,
-    @Query('academicYearId') academicYearId?: string,
   ) {
     return this.sessionService.findAll({ status, academicYearId });
+  }
+
+  // GET /academics/sessions/list?academicYearId=uuid&status=...
+  @Get('list')
+  listForSelect(
+    @Query('academicYearId', new ParseUUIDPipe({ optional: true }))
+    academicYearId?: string,
+    @Query('status') status?: AcademicSessionStatus,
+  ) {
+    return this.sessionService.listForSelect({ academicYearId, status });
   }
 
   // GET /academics/sessions/:id
@@ -53,8 +66,9 @@ export class AcademicSessionController {
     return this.sessionService.complete(id);
   }
 
+  // POST /academics/sessions
   @Post()
-createSession(@Body() dto: CreateAcademicSessionDto) {
-  return this.sessionService.create(dto);
-}
+  createSession(@Body() dto: CreateAcademicSessionDto) {
+    return this.sessionService.create(dto);
+  }
 }

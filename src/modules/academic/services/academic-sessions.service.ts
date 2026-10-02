@@ -4,8 +4,10 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
-import { UpdateAcademicSessionDto } from '../dto/update-academic-session.dto';
-import { CreateAcademicSessionDto } from '../dto/create-academic-session.dto';
+import {
+  CreateAcademicSessionDto,
+  UpdateAcademicSessionDto,
+} from '../dto/academic-session.dto';
 import { AcademicSessionResponse } from '../types/academic.types';
 import { Prisma } from '../../../generated/prisma/client';
 import { AcademicSessionStatus } from '../../../generated/prisma/enums';
@@ -72,6 +74,63 @@ export class AcademicSessionsService {
         academicYear: true,
       },
     });
+  }
+
+  /**
+   * Lightweight list – only id + name
+   * Ordering priority:
+   * 1. ACTIVE session(s) first
+   * 2. UPCOMING sessions ordered by startDate ASC (next expected)
+   * 3. Everything else by startDate DESC
+   */
+  async listForSelect(params?: {
+    academicYearId?: string;
+    status?: AcademicSessionStatus;
+  }) {
+    const { academicYearId, status } = params || {};
+
+    const sessions = await this.prisma.academicSession.findMany({
+      where: {
+        ...(academicYearId && { academicYearId }),
+        ...(status && { status }),
+      },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        startDate: true,
+      },
+    });
+
+    // Custom sort so ACTIVE comes first, then logical order
+    sessions.sort((a, b) => {
+      // Priority map
+      const priority: Record<AcademicSessionStatus, number> = {
+        ACTIVE: 0,
+        UPCOMING: 1,
+        COMPLETED: 2,
+        CANCELLED: 3,
+      };
+
+      const pA = priority[a.status] ?? 99;
+      const pB = priority[b.status] ?? 99;
+
+      if (pA !== pB) return pA - pB;
+
+      // Same status → sort by startDate
+      // UPCOMING: ascending (earliest next)
+      // Others: descending (most recent first)
+      if (a.status === AcademicSessionStatus.UPCOMING) {
+        return a.startDate.getTime() - b.startDate.getTime();
+      }
+      return b.startDate.getTime() - a.startDate.getTime();
+    });
+
+    // Return only id + name
+    return sessions.map((s) => ({
+      id: s.id,
+      name: s.name,
+    }));
   }
 
   async findOne(id: string) {

@@ -1,4 +1,3 @@
-// batch.service.ts
 import {
   Injectable,
   ConflictException,
@@ -6,8 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
-import { CreateBatchDto } from '../dto/create-batch.dto';
-import { UpdateBatchDto } from '../dto/update-batch.dto';
+import { CreateBatchDto, UpdateBatchDto } from '../dto/batch.dto';
 import { BatchStatus } from '../../../generated/prisma/enums';
 import { Prisma } from '../../../generated/prisma/client';
 import { MappedBatchResponse } from '../types/academic.types';

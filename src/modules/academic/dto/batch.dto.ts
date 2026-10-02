@@ -8,6 +8,7 @@ import {
   Min,
 } from 'class-validator';
 import { BatchStatus } from '../../../generated/prisma/enums';
+import { PartialType } from '@nestjs/mapped-types';
 
 export class CreateBatchDto {
   @IsString()
@@ -28,6 +29,13 @@ export class CreateBatchDto {
   @Min(1)
   sectionCapacity?: number;
 
+  @IsOptional()
+  @IsEnum(BatchStatus)
+  status?: BatchStatus;
+}
+
+export class UpdateBatchDto extends PartialType(CreateBatchDto) {
+  @IsString()
   @IsOptional()
   @IsEnum(BatchStatus)
   status?: BatchStatus;

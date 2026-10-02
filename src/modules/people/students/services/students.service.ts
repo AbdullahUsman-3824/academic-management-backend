@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../../../../database/prisma.service';
 import { UserService } from '../../../user/user.service';
 import { RoleService } from '../../../user/role/role.service';
+import { StudentAcademicRecordService } from '../../../academic/services/student-academic-record.service';
 import { CreateStudentDto } from '../dto/create-student.dto';
 import { UpdateStudentDto } from '../dto/update-student.dto';
 import { UpdateStudentStatusDto } from '../dto/update-student-status.dto';
@@ -34,11 +35,12 @@ export class StudentsService {
     private readonly prisma: PrismaService,
     private readonly userService: UserService,
     private readonly roleService: RoleService,
+    private readonly studentAcademicRecordService: StudentAcademicRecordService,
   ) {}
 
   // ── Enroll one student ────────────────────────────────────────────────────
 
-  async create(dto: CreateStudentDto): Promise<StudentDetail> {
+  async create(dto: CreateStudentDto) {
     const studentRole = await this.roleService.findByName(ROLES.STUDENT);
     const defaultPassword = process.env.DEFAULT_STUDENT_PASSWORD;
     if (!defaultPassword) {
@@ -109,7 +111,24 @@ export class StudentsService {
           user: { select: { id: true, username: true } },
         },
       });
-      return this.toDetail(student);
+
+      // 4. Create academic record for student
+      await this.studentAcademicRecordService.createRecord(
+        {
+          studentId: student.id,
+          batchId: dto.batchId,
+          academicSessionId: dto.academicSessionId,
+          semesterNumber: dto.semesterNumber,
+          sectionId: dto.sectionId,
+        },
+        tx,
+      );
+
+      return {
+        id: student.id,
+        message: 'Student enrolled successfully',
+        createdAt: student.createdAt,
+      };
     });
   }
 

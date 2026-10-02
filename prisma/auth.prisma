@@ -1,49 +1,58 @@
+// =====================================================
+// MODULE 1: AUTHENTICATION & USER MANAGEMENT
+// =====================================================
+
 model Role {
-  name            String           @unique
-  description     String?
-  createdAt       DateTime         @default(now()) @map("created_at")
-  updatedAt       DateTime?        @updatedAt @map("updated_at")
-  id              String           @id @default(uuid()) @db.Uuid
-  rolePermissions RolePermission[]
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String    @unique // student | faculty | admin | finance
+  description String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime? @updatedAt @map("updated_at")
+
   users           User[]
+  rolePermissions RolePermission[]
 
   @@map("roles")
 }
 
 model Permission {
-  name            String           @unique
-  description     String?
-  createdAt       DateTime         @default(now()) @map("created_at")
-  updatedAt       DateTime?        @updatedAt @map("updated_at")
-  id              String           @id @default(uuid()) @db.Uuid
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String    @unique
+  description String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime? @updatedAt @map("updated_at")
+
   rolePermissions RolePermission[]
 
   @@map("permissions")
 }
 
 model RolePermission {
-  roleId       String     @map("role_id") @db.Uuid
-  permissionId String     @map("permission_id") @db.Uuid
-  permission   Permission @relation(fields: [permissionId], references: [id])
-  role         Role       @relation(fields: [roleId], references: [id])
+  roleId       String @map("role_id") @db.Uuid
+  permissionId String @map("permission_id") @db.Uuid
+
+  role       Role       @relation(fields: [roleId], references: [id])
+  permission Permission @relation(fields: [permissionId], references: [id])
 
   @@unique([roleId, permissionId])
   @@map("role_permissions")
 }
 
 model User {
-  username         String                @unique
-  passwordHash     String                @map("password_hash")
-  status           String                @default("active")
-  lastLoginAt      DateTime?             @map("last_login_at")
-  createdAt        DateTime              @default(now()) @map("created_at")
-  updatedAt        DateTime?             @updatedAt @map("updated_at")
-  id               String                @id @default(uuid()) @db.Uuid
-  roleId           String                @map("role_id") @db.Uuid
-  faculty          Faculty?
-  finalizedResults StudentCourseResult[] @relation("ResultFinalizedBy")
-  student          Student?
-  role             Role                  @relation(fields: [roleId], references: [id])
+  id           String    @id @default(uuid()) @db.Uuid
+  username     String    @unique
+  passwordHash String    @map("password_hash")
+  roleId       String    @map("role_id") @db.Uuid
+  status       String    @default("active") // active | inactive
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime? @updatedAt @map("updated_at")
+
+  role                 Role                  @relation(fields: [roleId], references: [id])
+  student              Student?
+  faculty              Faculty?
+  finalizedResults     StudentCourseResult[] @relation("ResultFinalizedBy")
+  academicProgressions AcademicProgression[]
 
   @@map("users")
 }

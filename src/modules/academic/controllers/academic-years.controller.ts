@@ -9,9 +9,11 @@ import {
   Post,
 } from '@nestjs/common';
 import { AcademicYearsService } from '../services/academic-years.service';
-import { UpdateAcademicYearDto } from '../dto/update-academic-year.dto';
 import { AcademicYearStatus } from '../../../generated/prisma/enums';
-import { CreateAcademicYearDto } from '../dto/create-academic-year.dto';
+import {
+  CreateAcademicYearDto,
+  UpdateAcademicYearDto,
+} from '../dto/academic-year.dto';
 
 @Controller('academics/years')
 export class AcademicYearController {
@@ -38,9 +40,9 @@ export class AcademicYearController {
     return this.yearService.update(id, dto);
   }
 
+  // POST /academics/years
   @Post()
-createYear(@Body() dto: CreateAcademicYearDto) {
-  return this.yearService.create(dto);
-}
-  
+  createYear(@Body() dto: CreateAcademicYearDto) {
+    return this.yearService.create(dto);
+  }
 }

@@ -9,7 +9,7 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { BatchService } from '../services/batch.service';
-import { UpdateBatchDto } from '../dto/update-batch.dto';
+import { UpdateBatchDto } from '../dto/batch.dto';
 import { BatchStatus } from '../../../generated/prisma/enums';
 
 @Controller('academics/batches')

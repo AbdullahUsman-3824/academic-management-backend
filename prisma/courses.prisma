@@ -15,7 +15,8 @@ model Course {
   courseEnrollments CourseEnrollment[]
   courseAllocations CourseAllocation[]
   courseResults     StudentCourseResult[]
-  semesterCourses SemesterCourse[]
+  semesterCourses   SemesterCourse[]
+
   @@map("courses")
 }
 
@@ -59,13 +60,13 @@ model CourseAllocation {
 }
 
 model SemesterCourse {
-  id              String   @id @default(uuid()) @db.Uuid
-  semesterNumber  Int      @map("semester_number")
-  courseId        String   @map("course_id") @db.Uuid
-  isCompulsory    Boolean  @default(true) @map("is_compulsory")
-  displayOrder    Int      @default(0) @map("display_order")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime? @updatedAt @map("updated_at")
+  id             String    @id @default(uuid()) @db.Uuid
+  semesterNumber Int       @map("semester_number")
+  courseId       String    @map("course_id") @db.Uuid
+  isCompulsory   Boolean   @default(true) @map("is_compulsory")
+  displayOrder   Int       @default(0) @map("display_order")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime? @updatedAt @map("updated_at")
 
   course Course @relation(fields: [courseId], references: [id])
 

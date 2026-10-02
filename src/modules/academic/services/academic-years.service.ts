@@ -1,13 +1,16 @@
 import { PrismaService } from '../../../database/prisma.service';
 import { ConflictException } from '@nestjs/common/exceptions/conflict.exception';
-import { CreateAcademicYearDto } from '../dto/create-academic-year.dto';
+
 import {
   Injectable,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { UpdateAcademicYearDto } from '../dto/update-academic-year.dto';
 import { AcademicYearResponse } from '../types/academic.types';
+import {
+  CreateAcademicYearDto,
+  UpdateAcademicYearDto,
+} from '../dto/academic-year.dto';
 import { AcademicYearStatus } from '../../../generated/prisma/enums';
 import { Prisma } from '../../../generated/prisma/client';
 
@@ -53,13 +56,10 @@ export class AcademicYearsService {
     // don't nest another $transaction. Otherwise wrap standalone calls atomically.
     const academicYear = tx
       ? await run(tx)
-      : await this.prisma.$transaction(
-          async (trx) => run(trx),
-          {
-            maxWait: 10000, // 10 seconds max wait to acquire connection
-            timeout: 20000, // 20 seconds transaction timeout
-          },
-        );
+      : await this.prisma.$transaction(async (trx) => run(trx), {
+          maxWait: 10000, // 10 seconds max wait to acquire connection
+          timeout: 20000, // 20 seconds transaction timeout
+        });
 
     return {
       ...academicYear,

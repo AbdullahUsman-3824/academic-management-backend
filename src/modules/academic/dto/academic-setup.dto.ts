@@ -5,8 +5,13 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { SessionInSetupDto } from './session-in-setup.dto';
-import { CreateAcademicYearDto } from './create-academic-year.dto';
+import { OmitType } from '@nestjs/mapped-types';
+import { CreateAcademicYearDto } from './academic-year.dto';
+import { CreateAcademicSessionDto } from './academic-session.dto';
+
+export class SessionInSetupDto extends OmitType(CreateAcademicSessionDto, [
+  'academicYearId',
+] as const) {}
 
 export class AcademicSetupDto {
   @ValidateNested()
