@@ -2,6 +2,7 @@ import { seedPermissions } from './seed/permissions.seed';
 import { seedRoles } from './seed/roles.seed';
 import { seedRolePermissions } from './seed/role-permissions.seed';
 import { seedAdmin } from './seed/admin.seed';
+import { seedSemesters } from './seed/semesters.seed';
 
 import { PrismaClient } from '../src/generated/prisma/client.js';
 import { PrismaPg } from '@prisma/adapter-pg';
@@ -16,6 +17,7 @@ async function main() {
   await seedRoles(prisma);
   await seedRolePermissions(prisma);
   await seedAdmin(prisma);
+  await seedSemesters(prisma);
 
   console.log('\nSeeding completed.');
 }

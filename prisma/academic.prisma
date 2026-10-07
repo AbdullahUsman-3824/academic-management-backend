@@ -107,6 +107,8 @@ model StudentAcademicRecord {
   semesterNumber    Int                         @map("semester_number") // 1..8
   sectionId         String                      @map("section_id") @db.Uuid
   status            StudentAcademicRecordStatus @default(ENROLLED)
+  semesterId        String                      @map("semester_id") @db.Uuid
+  semester          Semester                    @relation(fields: [semesterId], references: [id])
 
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime? @updatedAt @map("updated_at")
@@ -120,4 +122,25 @@ model StudentAcademicRecord {
   @@unique([studentId, academicSessionId])
   @@index([batchId, sectionId])
   @@map("student_academic_records")
+}
+
+//Semester
+model Semester {
+  id          String  @id @default(uuid()) @db.Uuid
+  number      Int     @unique // 1, 2, 3, 4, 5, 6, 7, 8
+  name        String // "First Semester", "Second Semester"
+  displayName String  @map("display_name") // "Semester 1", "Sem-I"
+  minCredits  Int     @default(12) @map("min_credits")
+  maxCredits  Int     @default(21) @map("max_credits")
+  isActive    Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  semesterCourses   SemesterCourse[]
+  studentRecords    StudentAcademicRecord[]
+  courseAllocations CourseAllocation[] // Optional
+
+  @@map("semesters")
 }

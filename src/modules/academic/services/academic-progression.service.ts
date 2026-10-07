@@ -43,6 +43,13 @@ export class AcademicProgressionService {
   async getPreview(
     academicSessionId?: string,
   ): Promise<ProgressionPreviewResponse> {
+    // Pre-fetch all semesters for ID mapping
+    const semesters = await this.prisma.semester.findMany({
+      select: { id: true, number: true, name: true },
+      orderBy: { number: 'asc' },
+    });
+    const semesterMap = new Map(semesters.map((s) => [s.number, s]));
+
     // Resolve target session
     const session = academicSessionId
       ? await this.prisma.academicSession.findUnique({
@@ -92,10 +99,14 @@ export class AcademicProgressionService {
         },
         academicRecords: {
           where: { academicSessionId: { not: session.id } },
-          orderBy: { semesterNumber: 'desc' },
+          orderBy: { semester: { number: 'desc' } },
           take: 1,
           select: {
             semesterNumber: true,
+            semesterId: true,
+            semester: {
+              select: { id: true, number: true, name: true },
+            },
             sectionId: true,
             section: { select: { name: true } },
           },
@@ -106,10 +117,11 @@ export class AcademicProgressionService {
 
     const previewStudents: ProgressionStudentPreview[] = students.map((s) => {
       const latest = s.academicRecords[0];
-      const currentSemester = latest.semesterNumber;
+      const currentSemester = latest.semester?.number ?? latest.semesterNumber;
       const maxSemester = s.batch.programDuration * 2; // e.g. 4 years → 8 semesters
 
-      const targetSemester = Math.min(currentSemester + 1, maxSemester);
+      const targetSemesterNumber = Math.min(currentSemester + 1, maxSemester);
+      const targetSemester = semesterMap.get(targetSemesterNumber);
 
       return {
         studentId: s.id,
@@ -118,7 +130,11 @@ export class AcademicProgressionService {
         batchId: s.batch.id,
         batchName: s.batch.name,
         currentSemester,
-        targetSemester,
+        currentSemesterId: latest.semesterId,
+        currentSemesterName: latest.semester?.name ?? null,
+        targetSemester: targetSemesterNumber,
+        targetSemesterId: targetSemester?.id,
+        targetSemesterName: targetSemester?.name,
         currentSectionId: latest.sectionId,
         currentSectionName: latest.section?.name ?? null,
       };
@@ -145,6 +161,13 @@ export class AcademicProgressionService {
   async implement(
     dto: ImplementProgressionDto,
   ): Promise<ImplementProgressionResponse> {
+    // Pre-fetch all semesters for ID mapping
+    const semesters = await this.prisma.semester.findMany({
+      select: { id: true, number: true },
+      orderBy: { number: 'asc' },
+    });
+    const semesterMap = new Map(semesters.map((s) => [s.number, s.id]));
+
     const session = await this.prisma.academicSession.findUnique({
       where: { id: dto.academicSessionId },
       select: { id: true, name: true, status: true, progressed: true },
@@ -191,10 +214,12 @@ export class AcademicProgressionService {
         batch: { select: { programDuration: true } },
         academicRecords: {
           where: { academicSessionId: { not: session.id } },
-          orderBy: { semesterNumber: 'desc' },
+          orderBy: { semester: { number: 'desc' } },
           take: 1,
           select: {
             semesterNumber: true,
+            semesterId: true,
+            semester: { select: { number: true } },
             sectionId: true,
           },
         },
@@ -227,18 +252,29 @@ export class AcademicProgressionService {
 
       for (const s of students) {
         const latest = s.academicRecords[0];
+        const currentSemesterNumber =
+          latest.semester?.number ?? latest.semesterNumber;
         const maxSemester = s.batch.programDuration * 2;
 
-        const targetSemester =
+        const targetSemesterNumber =
           adjustmentMap.get(s.id) ??
-          Math.min(latest.semesterNumber + 1, maxSemester);
+          Math.min(currentSemesterNumber + 1, maxSemester);
+
+        // Resolve semester ID
+        const targetSemesterId = semesterMap.get(targetSemesterNumber);
+        if (!targetSemesterId) {
+          throw new BadRequestException(
+            `Semester ${targetSemesterNumber} not found in database`,
+          );
+        }
 
         await tx.studentAcademicRecord.create({
           data: {
             studentId: s.id,
             batchId: s.batchId,
             academicSessionId: session.id,
-            semesterNumber: targetSemester,
+            semesterId: targetSemesterId,
+            semesterNumber: targetSemesterNumber, // Keep for backward compatibility
             sectionId: latest.sectionId, // keep the same section
             status: StudentAcademicRecordStatus.ENROLLED,
           },

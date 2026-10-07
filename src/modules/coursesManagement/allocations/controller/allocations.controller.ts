@@ -6,35 +6,54 @@ import {
   Body,
   Param,
   Query,
-  ParseUUIDPipe,
+  UseGuards,
 } from '@nestjs/common';
 import { AllocationsService } from '../service/allocations.service';
-import { CreateAllocationDto } from '../dto/create-allocation.dto';
+import {
+  CreateAllocationDto,
+  BulkAllocationDto,
+  GetAllocationsQueryDto,
+} from '../dto';
+import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
 
-@Controller('course-allocations')
+@Controller('allocations')
+@UseGuards(JwtAuthGuard)
 export class AllocationsController {
-  constructor(private readonly service: AllocationsService) {}
+  constructor(private readonly allocationsService: AllocationsService) {}
 
   @Post()
   create(@Body() dto: CreateAllocationDto) {
-    return this.service.create(dto);
+    return this.allocationsService.create(dto);
+  }
+
+  @Post('bulk')
+  bulkCreate(@Body() dto: BulkAllocationDto) {
+    return this.allocationsService.bulkCreate(dto);
   }
 
   @Get()
-  findAll(
-    @Query('academicSessionId') academicSessionId?: string,
-    @Query('sectionId') sectionId?: string,
-    @Query('facultyId') facultyId?: string,
+  findAll(@Query() query: GetAllocationsQueryDto) {
+    return this.allocationsService.findAll(query);
+  }
+
+  @Get('section/:sectionId/semester/:semesterId')
+  getBySectionSemester(
+    @Param('sectionId') sectionId: string,
+    @Param('semesterId') semesterId: string,
   ) {
-    return this.service.findAll({
-      academicSessionId,
+    return this.allocationsService.getAllocationsBySectionSemester(
       sectionId,
-      facultyId,
-    });
+      semesterId,
+    );
+  }
+
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.allocationsService.findOne(id);
   }
 
   @Delete(':id')
-  remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.service.remove(id);
+  remove(@Param('id') id: string) {
+    return this.allocationsService.remove(id);
   }
 }

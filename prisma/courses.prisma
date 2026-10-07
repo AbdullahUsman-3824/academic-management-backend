@@ -43,33 +43,40 @@ model CourseAllocation {
   id                String    @id @default(uuid()) @db.Uuid
   courseId          String    @map("course_id") @db.Uuid
   facultyId         String    @map("faculty_id") @db.Uuid
-  academicSessionId String    @map("academic_session_id") @db.Uuid
   sectionId         String    @map("section_id") @db.Uuid
+  semesterId        String    @map("semester_id") @db.Uuid // NEW: Required
+  academicSessionId String    @map("academic_session_id") @db.Uuid // Keep for backend
   status            String    @default("active") // active | inactive
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime? @updatedAt @map("updated_at")
 
   course          Course          @relation(fields: [courseId], references: [id])
   faculty         Faculty         @relation(fields: [facultyId], references: [id])
-  academicSession AcademicSession @relation(fields: [academicSessionId], references: [id])
   section         Section         @relation(fields: [sectionId], references: [id])
+  semester        Semester        @relation(fields: [semesterId], references: [id])
+  academicSession AcademicSession @relation(fields: [academicSessionId], references: [id])
   assessments     Assessment[]
 
-  @@unique([courseId, facultyId, academicSessionId, sectionId])
+  // One teacher per course per section per session
+  @@unique([courseId, facultyId, sectionId, academicSessionId])
+  @@index([facultyId, academicSessionId, status])
+  @@index([sectionId, semesterId])
   @@map("course_allocations")
 }
 
 model SemesterCourse {
   id             String    @id @default(uuid()) @db.Uuid
-  semesterNumber Int       @map("semester_number")
+  semesterId     String    @map("semester_id") @db.Uuid
+  semesterNumber Int       @map("semester_number") // DEPRECATED: Keep for backward compatibility
   courseId       String    @map("course_id") @db.Uuid
   isCompulsory   Boolean   @default(true) @map("is_compulsory")
   displayOrder   Int       @default(0) @map("display_order")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime? @updatedAt @map("updated_at")
 
-  course Course @relation(fields: [courseId], references: [id])
+  semester Semester @relation(fields: [semesterId], references: [id])
+  course   Course   @relation(fields: [courseId], references: [id])
 
-  @@unique([semesterNumber, courseId])
+  @@unique([semesterId, courseId])
   @@map("semester_courses")
 }

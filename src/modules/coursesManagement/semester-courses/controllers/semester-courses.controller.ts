@@ -32,9 +32,21 @@ export class SemesterCoursesController {
   @Get()
   findAll(@Query('semesterNumber') semesterNumber?: string) {
     if (semesterNumber) {
-      return this.service.findBySemester(Number(semesterNumber));
+      return this.service.findBySemesterNumber(Number(semesterNumber));
     }
     return this.service.findAll();
+  }
+
+  // NEW: Get courses by semester ID
+  @Get('semester/:semesterId')
+  findBySemester(@Param('semesterId', ParseUUIDPipe) semesterId: string) {
+    return this.service.findBySemester(semesterId);
+  }
+
+  // NEW: Get courses by semester number (convenience)
+  @Get('semester-number/:number')
+  findBySemesterNumber(@Param('number', ParseIntPipe) number: number) {
+    return this.service.findBySemesterNumber(number);
   }
 
   @Delete(':id')

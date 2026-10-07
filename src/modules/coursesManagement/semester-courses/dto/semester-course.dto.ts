@@ -1,9 +1,35 @@
-import { IsInt, IsUUID, IsBoolean, IsOptional, Min, Max } from 'class-validator';
+import {
+  IsInt,
+  IsUUID,
+  IsBoolean,
+  IsOptional,
+  Min,
+  Max,
+} from 'class-validator';
 
 export class CreateSemesterCourseDto {
+  // CHANGED: Use semesterId instead of semesterNumber
+  @IsUUID()
+  semesterId!: string; // CHANGED
+
+  @IsUUID()
+  courseId!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isCompulsory?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  displayOrder?: number;
+}
+
+// NEW: For backward compatibility or convenience
+export class CreateSemesterCourseByNumberDto {
   @IsInt()
   @Min(1)
-  @Max(16)
+  @Max(8)
   semesterNumber!: number;
 
   @IsUUID()
@@ -15,14 +41,13 @@ export class CreateSemesterCourseDto {
 
   @IsOptional()
   @IsInt()
+  @Min(0)
   displayOrder?: number;
 }
 
 export class BulkSemesterCourseDto {
-  @IsInt()
-  @Min(1)
-  @Max(16)
-  semesterNumber!: number;
+  @IsUUID()
+  semesterId!: string; // CHANGED
 
   @IsUUID('4', { each: true })
   courseIds!: string[];

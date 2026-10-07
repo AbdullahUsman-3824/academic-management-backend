@@ -19,20 +19,33 @@ export class SemesterCoursesService {
     });
     if (!course) throw new NotFoundException('Course not found');
 
+    // NEW: Validate semester exists
+    const semester = await this.prisma.semester.findUnique({
+      where: { id: dto.semesterId }, // CHANGED: Use semesterId from DTO
+    });
+    if (!semester) throw new NotFoundException('Semester not found');
+
     try {
+      // Get semester number for backward compatibility
+      const semesterNumber = semester.number;
+
       return await this.prisma.semesterCourse.create({
         data: {
-          semesterNumber: dto.semesterNumber,
+          semesterId: dto.semesterId, // CHANGED
+          semesterNumber, // Keep for backward compatibility
           courseId: dto.courseId,
           isCompulsory: dto.isCompulsory ?? true,
           displayOrder: dto.displayOrder ?? 0,
         },
-        include: { course: true },
+        include: {
+          course: true,
+          semester: true, // NEW: Include semester details
+        },
       });
     } catch (e: any) {
       if (e.code === 'P2002') {
         throw new ConflictException(
-          'This course is already mapped to this semester',
+          `This course is already mapped to ${semester.displayName}`,
         );
       }
       throw e;
@@ -44,7 +57,7 @@ export class SemesterCoursesService {
     for (const courseId of dto.courseIds) {
       try {
         const row = await this.create({
-          semesterNumber: dto.semesterNumber,
+          semesterId: dto.semesterId, // CHANGED
           courseId,
           isCompulsory: true,
         });
@@ -56,18 +69,36 @@ export class SemesterCoursesService {
     return results;
   }
 
-  async findBySemester(semesterNumber: number) {
+  // NEW: Accept semesterId instead of semesterNumber
+  async findBySemester(semesterId: string) {
     return this.prisma.semesterCourse.findMany({
-      where: { semesterNumber },
-      include: { course: true },
+      where: { semesterId }, // CHANGED: UUID instead of number
+      include: {
+        course: true,
+        semester: true, // NEW: Include semester details
+      },
       orderBy: { displayOrder: 'asc' },
     });
   }
 
+  // OPTIONAL: Keep backward compatibility method
+  async findBySemesterNumber(semesterNumber: number) {
+    const semester = await this.prisma.semester.findUnique({
+      where: { number: semesterNumber },
+    });
+    if (!semester) {
+      throw new NotFoundException(`Semester ${semesterNumber} not found`);
+    }
+    return this.findBySemester(semester.id);
+  }
+
   async findAll() {
     return this.prisma.semesterCourse.findMany({
-      include: { course: true },
-      orderBy: [{ semesterNumber: 'asc' }, { displayOrder: 'asc' }],
+      include: {
+        course: true,
+        semester: true, // NEW: Include semester details
+      },
+      orderBy: [{ semester: { number: 'asc' } }, { displayOrder: 'asc' }],
     });
   }
 

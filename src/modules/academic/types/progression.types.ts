@@ -5,7 +5,11 @@ export interface ProgressionStudentPreview {
   batchId: string;
   batchName: string;
   currentSemester: number;
+  currentSemesterId: string | null;
+  currentSemesterName: string | null;
   targetSemester: number; // current + 1 (capped)
+  targetSemesterId?: string;
+  targetSemesterName?: string;
   currentSectionId: string | null;
   currentSectionName: string | null;
 }

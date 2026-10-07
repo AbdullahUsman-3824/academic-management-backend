@@ -110,12 +110,25 @@ export class StudentAcademicRecordService {
 
     // ── Create the record ──────────────────────
     try {
+      // Resolve semester ID from semester number
+      const semester = await client.semester.findUnique({
+        where: { number: semesterNumber },
+        select: { id: true },
+      });
+
+      if (!semester) {
+        throw new BadRequestException(
+          `Semester ${semesterNumber} not found in database`,
+        );
+      }
+
       const record = await client.studentAcademicRecord.create({
         data: {
           studentId,
           batchId,
           academicSessionId,
           semesterNumber,
+          semesterId: semester.id, // ADD: Required field
           sectionId: suggested.id,
           status: 'ENROLLED',
         },
@@ -137,7 +150,8 @@ export class StudentAcademicRecordService {
           batchId: record.batchId,
           academicSessionId: record.academicSessionId,
           semesterNumber: record.semesterNumber,
-          section: record.section,
+          sectionId: record.sectionId,
+          sectionName: record.section?.name,
           status: record.status,
           sectionReason: suggested.reason,
         },

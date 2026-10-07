@@ -250,4 +250,123 @@ export class EnrollmentsService {
 
     return stats;
   }
+
+  /**
+   * AUTO-ENROLL: Automatically enroll student in compulsory courses for their semester
+   * @param studentAcademicRecordId - The newly created StudentAcademicRecord ID
+   * @param semesterId - The semester UUID (CHANGED from semesterNumber)
+   * @param tx - Optional Prisma transaction client
+   */
+  async autoEnrollInSemesterCourses(
+    studentAcademicRecordId: string,
+    semesterId: string, // CHANGED: UUID instead of Int
+    tx?: any,
+  ): Promise<{
+    created: Array<{
+      courseId: string;
+      courseCode: string;
+      courseName: string;
+      creditHours: number;
+    }>;
+    skipped: number;
+    errors: Array<{ courseId: string; error: string }>;
+  }> {
+    const prisma = tx || this.prisma;
+    try {
+      // CHANGED: Query by semesterId instead of semesterNumber
+      const semesterCourses = await prisma.semesterCourse.findMany({
+        where: {
+          semesterId, // CHANGED: UUID comparison
+          isCompulsory: true,
+        },
+        include: {
+          course: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              status: true,
+              creditHours: true,
+            },
+          },
+          semester: {
+            // NEW: Include semester for logging
+            select: {
+              number: true,
+              name: true,
+              displayName: true,
+            },
+          },
+        },
+        orderBy: { displayOrder: 'asc' },
+      });
+
+      const activeCourses = semesterCourses.filter(
+        (sc) => sc.course.status === 'active',
+      );
+
+      if (activeCourses.length === 0) {
+        // CHANGED: Better logging with semester name
+        const semesterName =
+          semesterCourses[0]?.semester?.displayName ?? semesterId;
+        console.warn(
+          `[AUTO-ENROLL] No active compulsory courses for ${semesterName}`,
+        );
+        return { created: [], skipped: 0, errors: [] };
+      }
+
+      const created: any[] = [];
+      const errors: Array<{ courseId: string; error: string }> = [];
+      let skipped = 0;
+
+      for (const sc of activeCourses) {
+        try {
+          await prisma.courseEnrollment.create({
+            data: {
+              studentAcademicRecordId,
+              courseId: sc.courseId,
+              status: 'enrolled',
+              isExtra: false,
+            },
+          });
+
+          created.push({
+            courseId: sc.courseId,
+            courseCode: sc.course.code,
+            courseName: sc.course.name,
+            creditHours: sc.course.creditHours,
+          });
+
+          console.log(
+            `[AUTO-ENROLL] ✓ ${sc.course.code}: ${sc.course.name} ` +
+              `(${sc.semester.displayName})`,
+          );
+        } catch (error: any) {
+          if (error.code === 'P2002') {
+            skipped++;
+            console.debug(
+              `[AUTO-ENROLL] ⊘ Student already enrolled in ${sc.course.code}`,
+            );
+          } else {
+            errors.push({ courseId: sc.courseId, error: error.message });
+            console.error(
+              `[AUTO-ENROLL] ✗ ${sc.course.code}: ${error.message}`,
+            );
+          }
+        }
+      }
+
+      console.log(
+        `[AUTO-ENROLL] ${semesterCourses[0]?.semester?.displayName} complete: ` +
+          `${created.length} created, ${skipped} skipped, ${errors.length} errors`,
+      );
+
+      return { created, skipped, errors };
+    } catch (error: any) {
+      console.error('[AUTO-ENROLL] Fatal error:', error);
+      throw new BadRequestException(
+        `Auto-enrollment failed: ${error.message}`,
+      );
+    }
+  }
 }
