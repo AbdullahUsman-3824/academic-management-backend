@@ -3,6 +3,8 @@ import { PrismaClient } from '../../src/generated/prisma/client.js';
 import { ROLES } from '../../src/common/constants/roles.js';
 
 export async function seedAdmin(prisma: PrismaClient) {
+  console.log('👤 Seeding Admin...');
+
   const username = process.env.ADMIN_USERNAME;
   const password = process.env.ADMIN_PASSWORD;
 
@@ -11,13 +13,23 @@ export async function seedAdmin(prisma: PrismaClient) {
   }
 
   const passwordHash = await argon2.hash(password);
+
   const adminRole = await prisma.role.findUniqueOrThrow({
     where: { name: ROLES.ADMIN },
   });
 
   await prisma.user.upsert({
     where: { username },
-    update: { passwordHash, roleId: adminRole.id },
-    create: { username, passwordHash, roleId: adminRole.id },
+    update: {
+      passwordHash,
+      roleId: adminRole.id,
+    },
+    create: {
+      username,
+      passwordHash,
+      roleId: adminRole.id,
+    },
   });
+
+  console.log(`   ✓ Admin "${username}" seeded`);
 }
