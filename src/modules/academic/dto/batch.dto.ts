@@ -28,10 +28,6 @@ export class CreateBatchDto {
   @IsInt()
   @Min(1)
   sectionCapacity?: number;
-
-  @IsOptional()
-  @IsEnum(BatchStatus)
-  status?: BatchStatus;
 }
 
 export class UpdateBatchDto extends PartialType(CreateBatchDto) {

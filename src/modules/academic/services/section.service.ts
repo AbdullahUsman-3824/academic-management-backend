@@ -213,7 +213,12 @@ export class SectionService {
     batchId: string,
     sectionId?: string | null,
     client: Db = this.prisma,
-  ) {
+  ): Promise<{
+    id: string;
+    name: string;
+    studentCount?: number;
+    reason: string;
+  }> {
     // 1. Explicit sectionId given → just validate & return
     if (sectionId) {
       const section = await this.findSectionOrThrow(batchId, sectionId);

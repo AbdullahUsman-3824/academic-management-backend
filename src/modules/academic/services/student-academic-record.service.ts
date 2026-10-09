@@ -1,5 +1,3 @@
-// StudentAcademicRecordService
-
 import {
   Injectable,
   BadRequestException,

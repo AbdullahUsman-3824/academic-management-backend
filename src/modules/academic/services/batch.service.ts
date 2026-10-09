@@ -39,7 +39,7 @@ export class BatchService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(createBatchDto: CreateBatchDto, tx?: TxClient) {
-    const { name, entryYearId, programDuration, sectionCapacity, status } =
+    const { name, entryYearId, programDuration, sectionCapacity } =
       createBatchDto;
 
     const client = tx ?? this.prisma;
@@ -61,7 +61,7 @@ export class BatchService {
           entryYearId,
           programDuration: programDuration ?? DEFAULT_PROGRAM_DURATION,
           sectionCapacity: sectionCapacity ?? DEFAULT_SECTION_CAPACITY,
-          status: status ?? BatchStatus.ACTIVE,
+          status: BatchStatus.ACTIVE,
         },
       });
     } catch (err) {
@@ -176,32 +176,5 @@ export class BatchService {
     });
 
     return this.toBatchResponse(updated);
-  }
-
-  async activate(id: string): Promise<MappedBatchResponse> {
-    const batch = await this.findOne(id);
-
-    if (batch.status === BatchStatus.ACTIVE) {
-      throw new BadRequestException('Batch is already active');
-    }
-
-    if (
-      batch.status === BatchStatus.COMPLETED ||
-      batch.status === BatchStatus.CANCELLED
-    ) {
-      throw new BadRequestException(
-        `Cannot activate a batch with status "${batch.status}"`,
-      );
-    }
-
-    const activated = await this.prisma.batch.update({
-      where: { id },
-      data: {
-        status: BatchStatus.ACTIVE,
-      },
-      include: BATCH_WITH_RELATIONS,
-    });
-
-    return this.toBatchResponse(activated);
   }
 }

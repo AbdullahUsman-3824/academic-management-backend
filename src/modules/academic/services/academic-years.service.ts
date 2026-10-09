@@ -11,7 +11,7 @@ import {
   CreateAcademicYearDto,
   UpdateAcademicYearDto,
 } from '../dto/academic-year.dto';
-import { AcademicYearStatus } from '../../../generated/prisma/enums';
+import { AcademicYearStatus } from '../../../generated/prisma/client';
 import { Prisma } from '../../../generated/prisma/client';
 
 type TxClient = Prisma.TransactionClient;
@@ -26,17 +26,12 @@ export class AcademicYearsService {
   ): Promise<AcademicYearResponse> {
     const run = async (client: TxClient | PrismaService) => {
       try {
-        await client.academicYear.updateMany({
-          where: { status: AcademicYearStatus.ACTIVE },
-          data: { status: AcademicYearStatus.COMPLETED },
-        });
-
         return await client.academicYear.create({
           data: {
             name: data.name,
             startDate: new Date(data.startDate),
             endDate: new Date(data.endDate),
-            status: AcademicYearStatus.ACTIVE,
+            status: AcademicYearStatus.INACTIVE,
           },
         });
       } catch (err) {
@@ -104,7 +99,24 @@ export class AcademicYearsService {
   }
 
   async update(id: string, dto: UpdateAcademicYearDto) {
-    await this.findOne(id);
+    const year = await this.findOne(id);
+
+    const isActive = year.status === AcademicYearStatus.ACTIVE;
+    const isCompleted = year.status === AcademicYearStatus.COMPLETED;
+
+    if (isCompleted) {
+      throw new BadRequestException('Cannot edit a completed academic year');
+    }
+
+    // Once active, dates cannot be changed
+    if (
+      isActive &&
+      (dto.startDate !== undefined || dto.endDate !== undefined)
+    ) {
+      throw new BadRequestException(
+        'Cannot change dates of an active academic year. Only name can be updated.',
+      );
+    }
 
     const data: Prisma.AcademicYearUpdateInput = {
       ...(dto.name !== undefined && { name: dto.name }),
@@ -114,7 +126,7 @@ export class AcademicYearsService {
       ...(dto.endDate !== undefined && { endDate: new Date(dto.endDate) }),
     };
 
-    return this.prisma.academicYear.update({
+    const updated = await this.prisma.academicYear.update({
       where: { id },
       data,
       include: {
@@ -123,6 +135,7 @@ export class AcademicYearsService {
         },
       },
     });
+    return updated;
   }
 
   async remove(id: string) {

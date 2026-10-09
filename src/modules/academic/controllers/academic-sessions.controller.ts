@@ -10,10 +10,7 @@ import {
 } from '@nestjs/common';
 import { AcademicSessionsService } from '../services/academic-sessions.service';
 import { AcademicSessionStatus } from '../../../generated/prisma/enums';
-import {
-  CreateAcademicSessionDto,
-  UpdateAcademicSessionDto,
-} from '../dto/academic-session.dto';
+import { UpdateAcademicSessionDto } from '../dto/academic-session.dto';
 
 @Controller('academics/sessions')
 export class AcademicSessionController {
@@ -64,11 +61,5 @@ export class AcademicSessionController {
   @Post(':id/complete')
   completeSession(@Param('id', ParseUUIDPipe) id: string) {
     return this.sessionService.complete(id);
-  }
-
-  // POST /academics/sessions
-  @Post()
-  createSession(@Body() dto: CreateAcademicSessionDto) {
-    return this.sessionService.create(dto);
   }
 }

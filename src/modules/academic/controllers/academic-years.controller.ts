@@ -6,14 +6,10 @@ import {
   Query,
   Body,
   ParseUUIDPipe,
-  Post,
 } from '@nestjs/common';
 import { AcademicYearsService } from '../services/academic-years.service';
 import { AcademicYearStatus } from '../../../generated/prisma/enums';
-import {
-  CreateAcademicYearDto,
-  UpdateAcademicYearDto,
-} from '../dto/academic-year.dto';
+import { UpdateAcademicYearDto } from '../dto/academic-year.dto';
 
 @Controller('academics/years')
 export class AcademicYearController {
@@ -38,11 +34,5 @@ export class AcademicYearController {
     @Body() dto: UpdateAcademicYearDto,
   ) {
     return this.yearService.update(id, dto);
-  }
-
-  // POST /academics/years
-  @Post()
-  createYear(@Body() dto: CreateAcademicYearDto) {
-    return this.yearService.create(dto);
   }
 }

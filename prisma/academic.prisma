@@ -11,6 +11,7 @@ enum AcademicYearStatus {
 enum AcademicSessionStatus {
   UPCOMING
   ACTIVE
+  INACTIVE
   COMPLETED
   CANCELLED
 }
@@ -57,7 +58,6 @@ model AcademicSession {
   studentAcademicRecords StudentAcademicRecord[]
   courseAllocations      CourseAllocation[]
   courseResults          StudentCourseResult[]
-  academicProgressions   AcademicProgression[]
 
   @@map("academic_sessions")
 }

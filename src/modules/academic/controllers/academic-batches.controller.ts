@@ -1,7 +1,6 @@
 import {
   Controller,
   Get,
-  Post,
   Patch,
   Param,
   Query,
@@ -35,11 +34,5 @@ export class AcademicBatchController {
     @Body() dto: UpdateBatchDto,
   ) {
     return this.batchService.update(id, dto);
-  }
-
-  // POST /academics/batches/:id/activate
-  @Post(':id/activate')
-  activateBatch(@Param('id', ParseUUIDPipe) id: string) {
-    return this.batchService.activate(id);
   }
 }

@@ -47,89 +47,98 @@ export class StudentsService {
       throw new Error('DEFAULT_STUDENT_PASSWORD must be configured');
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      // 1. Existence checks inside the transaction
-      const [batch, existingStudent, existingUser] = await Promise.all([
-        tx.batch.findUnique({ where: { id: dto.batchId } }),
-        tx.student.findFirst({
-          where: {
-            OR: [
-              { stdRegNumber: dto.stdRegNumber },
-              ...(dto.cnic ? [{ cnic: dto.cnic }] : []),
-            ],
+    return this.prisma.$transaction(
+      async (tx) => {
+        // 1. Existence checks inside the transaction
+        const [batch, existingStudent, existingUser] = await Promise.all([
+          tx.batch.findUnique({ where: { id: dto.batchId } }),
+          tx.student.findFirst({
+            where: {
+              OR: [
+                { stdRegNumber: dto.stdRegNumber },
+                ...(dto.cnic ? [{ cnic: dto.cnic }] : []),
+              ],
+            },
+          }),
+          tx.user.findUnique({ where: { username: dto.stdRegNumber } }),
+        ]);
+        if (!batch) throw new NotFoundException('Batch not found');
+        if (existingStudent?.stdRegNumber === dto.stdRegNumber)
+          throw new ConflictException(
+            'Student registration number already exists',
+          );
+        if (existingStudent?.cnic === dto.cnic)
+          throw new ConflictException('CNIC already exists');
+        if (existingUser)
+          throw new ConflictException('Username already exists');
+
+        // 2. Create user
+        const user = await this.userService.create(
+          {
+            username: dto.stdRegNumber.toLowerCase(),
+            password: defaultPassword,
+            roleId: studentRole.id,
           },
-        }),
-        tx.user.findUnique({ where: { username: dto.stdRegNumber } }),
-      ]);
-      if (!batch) throw new NotFoundException('Batch not found');
-      if (existingStudent?.stdRegNumber === dto.stdRegNumber)
-        throw new ConflictException(
-          'Student registration number already exists',
+          tx,
         );
-      if (existingStudent?.cnic === dto.cnic)
-        throw new ConflictException('CNIC already exists');
-      if (existingUser) throw new ConflictException('Username already exists');
 
-      // 2. Create user
-      const user = await this.userService.create(
-        {
-          username: dto.stdRegNumber.toLowerCase(),
-          password: defaultPassword,
-          roleId: studentRole.id,
-        },
-        tx,
-      );
+        // 3. Create student
+        const student = await tx.student.create({
+          data: {
+            userId: user.id,
+            batchId: dto.batchId,
+            stdRegNumber: dto.stdRegNumber.toUpperCase(),
+            firstName: dto.firstName,
+            middleName: dto.middleName,
+            lastName: dto.lastName,
+            email: dto.email,
+            dateOfBirth: dto.dateOfBirth
+              ? new Date(dto.dateOfBirth)
+              : undefined,
+            gender: dto.gender,
+            cnic: dto.cnic,
+            profileImageUrl: dto.profileImageUrl,
+            phone: dto.phone,
+            address: dto.address,
+            city: dto.city,
+            guardianName: dto.guardianName,
+            guardianRelation: dto.guardianRelation,
+            guardianPhone: dto.guardianPhone,
+            guardianCnic: dto.guardianCnic,
+            admissionDate: dto.admissionDate
+              ? new Date(dto.admissionDate)
+              : new Date(),
+            status: StudentStatus.ACTIVE,
+          },
+          include: {
+            batch: { select: { id: true, name: true } },
+            user: { select: { id: true, username: true } },
+          },
+        });
 
-      // 3. Create student
-      const student = await tx.student.create({
-        data: {
-          userId: user.id,
-          batchId: dto.batchId,
-          stdRegNumber: dto.stdRegNumber.toUpperCase(),
-          firstName: dto.firstName,
-          middleName: dto.middleName,
-          lastName: dto.lastName,
-          email: dto.email,
-          dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
-          gender: dto.gender,
-          cnic: dto.cnic,
-          profileImageUrl: dto.profileImageUrl,
-          phone: dto.phone,
-          address: dto.address,
-          city: dto.city,
-          guardianName: dto.guardianName,
-          guardianRelation: dto.guardianRelation,
-          guardianPhone: dto.guardianPhone,
-          guardianCnic: dto.guardianCnic,
-          admissionDate: dto.admissionDate
-            ? new Date(dto.admissionDate)
-            : new Date(),
-          status: StudentStatus.ACTIVE,
-        },
-        include: {
-          batch: { select: { id: true, name: true } },
-          user: { select: { id: true, username: true } },
-        },
-      });
+        // 4. Create academic record for student
+        await this.studentAcademicRecordService.createRecord(
+          {
+            studentId: student.id,
+            batchId: dto.batchId,
+            academicSessionId: dto.academicSessionId,
+            semesterNumber: dto.semesterNumber,
+            sectionId: dto.sectionId,
+          },
+          tx,
+        );
 
-      // 4. Create academic record for student
-      await this.studentAcademicRecordService.createRecord(
-        {
-          studentId: student.id,
-          batchId: dto.batchId,
-          academicSessionId: dto.academicSessionId,
-          semesterNumber: dto.semesterNumber,
-          sectionId: dto.sectionId,
-        },
-        tx,
-      );
-
-      return {
-        id: student.id,
-        message: 'Student enrolled successfully',
-        createdAt: student.createdAt,
-      };
-    });
+        return {
+          id: student.id,
+          message: 'Student enrolled successfully',
+          createdAt: student.createdAt,
+        };
+      },
+      {
+        maxWait: 10000,
+        timeout: 30000,
+      },
+    );
   }
 
   // ── List ──────────────────────────────────────────────────────────────────
