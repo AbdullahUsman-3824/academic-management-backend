@@ -70,26 +70,21 @@ export class AcademicSessionsService {
       );
     }
 
-    return this.prisma.academicSession.findMany({
+    const sessions = await this.prisma.academicSession.findMany({
       where: {
         ...(status && { status }),
         ...(academicYearId && { academicYearId }),
-      },
-      orderBy: {
-        startDate: 'desc',
       },
       include: {
         academicYear: true,
       },
     });
+
+    return this.sortSessions(sessions);
   }
 
   /**
    * Lightweight list – only id + name
-   * Ordering priority:
-   * 1. ACTIVE session(s) first
-   * 2. UPCOMING sessions ordered by startDate ASC (next expected)
-   * 3. Everything else by startDate DESC
    */
   async listForSelect(params?: {
     academicYearId?: string;
@@ -110,33 +105,7 @@ export class AcademicSessionsService {
       },
     });
 
-    // Custom sort so ACTIVE comes first, then logical order
-    sessions.sort((a, b) => {
-      // Priority map
-      const priority: Record<AcademicSessionStatus, number> = {
-        ACTIVE: 0,
-        UPCOMING: 1,
-        COMPLETED: 2,
-        INACTIVE: 3,
-        CANCELLED: 4,
-      };
-
-      const pA = priority[a.status] ?? 99;
-      const pB = priority[b.status] ?? 99;
-
-      if (pA !== pB) return pA - pB;
-
-      // Same status → sort by startDate
-      // UPCOMING: ascending (earliest next)
-      // Others: descending (most recent first)
-      if (a.status === AcademicSessionStatus.UPCOMING) {
-        return a.startDate.getTime() - b.startDate.getTime();
-      }
-      return b.startDate.getTime() - a.startDate.getTime();
-    });
-
-    // Return only id + name
-    return sessions.map((s) => ({
+    return this.sortSessions(sessions).map((s) => ({
       id: s.id,
       name: s.name,
     }));
@@ -333,6 +302,37 @@ export class AcademicSessionsService {
       }
 
       return completed;
+    });
+  }
+
+  // Private helpers
+  private static readonly STATUS_PRIORITY: Record<
+    AcademicSessionStatus,
+    number
+  > = {
+    ACTIVE: 0,
+    UPCOMING: 1,
+    INACTIVE: 2,
+    COMPLETED: 3,
+    CANCELLED: 4,
+  };
+  private sortSessions<
+    T extends { status: AcademicSessionStatus; startDate: Date },
+  >(sessions: T[]): T[] {
+    return sessions.sort((a, b) => {
+      const pA = AcademicSessionsService.STATUS_PRIORITY[a.status] ?? 99;
+      const pB = AcademicSessionsService.STATUS_PRIORITY[b.status] ?? 99;
+
+      if (pA !== pB) return pA - pB;
+
+      // UPCOMING / INACTIVE → earliest first; others → most recent first
+      if (
+        a.status === AcademicSessionStatus.UPCOMING ||
+        a.status === AcademicSessionStatus.INACTIVE
+      ) {
+        return a.startDate.getTime() - b.startDate.getTime();
+      }
+      return b.startDate.getTime() - a.startDate.getTime();
     });
   }
 }

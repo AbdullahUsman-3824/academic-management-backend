@@ -21,6 +21,12 @@ class ProgressionAdjustmentDto {
   targetSemester!: number;
 }
 
+class ExcludedGroupDto {
+  @IsUUID() batchId!: string;
+  @IsInt() fromSemester!: number;
+  @IsInt() toSemester!: number;
+}
+
 export class ImplementProgressionDto {
   @IsUUID()
   academicSessionId!: string;
@@ -31,4 +37,15 @@ export class ImplementProgressionDto {
   @Type(() => ProgressionAdjustmentDto)
   @ArrayMinSize(0)
   adjustments?: ProgressionAdjustmentDto[];
+
+  @IsOptional()
+  @IsArray()
+  @IsUUID('all', { each: true })
+  excludedStudentIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ExcludedGroupDto)
+  excludedGroups?: ExcludedGroupDto[];
 }

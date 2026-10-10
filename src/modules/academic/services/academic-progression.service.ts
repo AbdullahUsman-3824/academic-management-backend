@@ -11,10 +11,10 @@ import {
 } from '../../../generated/prisma/enums';
 import {
   ProgressionPreviewResponse,
-  ProgressionStudentPreview,
+  ProgressionBatchPreview,
+  ProgressionTransitionPreview,
   ImplementProgressionResponse,
 } from '../types/progression.types';
-
 import { ImplementProgressionDto } from '../dto/implement-progression.dto';
 
 // ─── Helper ──────────────────────────────────────────────────────────────────
@@ -27,30 +27,22 @@ function fullName(
   return [first, middle, last].filter(Boolean).join(' ');
 }
 
+function groupKey(batchId: string, from: number, to: number): string {
+  return `${batchId}:${from}:${to}`;
+}
+
 @Injectable()
 export class AcademicProgressionService {
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════════════════════════
-  // PREVIEW
+  // SHARED HELPERS
   // ══════════════════════════════════════════════════════════════════════════
 
   /**
-   * Preview what the progression will look like for the given (or current ACTIVE) session.
-   * Only students who already have at least one academic record are included.
-   * Target semester = previous semester + 1 (capped by programDuration * 2).
+   * Session resolve + validate. Preview aur implement dono yehi use karte hain.
    */
-  async getPreview(
-    academicSessionId?: string,
-  ): Promise<ProgressionPreviewResponse> {
-    // Pre-fetch all semesters for ID mapping
-    const semesters = await this.prisma.semester.findMany({
-      select: { id: true, number: true, name: true },
-      orderBy: { number: 'asc' },
-    });
-    const semesterMap = new Map(semesters.map((s) => [s.number, s]));
-
-    // Resolve target session
+  private async resolveSessionForProgression(academicSessionId?: string) {
     const session = academicSessionId
       ? await this.prisma.academicSession.findUnique({
           where: { id: academicSessionId },
@@ -70,22 +62,35 @@ export class AcademicProgressionService {
       );
     }
 
+    if (session.status !== AcademicSessionStatus.ACTIVE) {
+      throw new BadRequestException(`Session "${session.name}" is not ACTIVE`);
+    }
+
     if (session.progressed) {
-      throw new BadRequestException(
+      throw new ConflictException(
         `Session "${session.name}" has already been progressed`,
       );
     }
 
-    // All active students that already have at least one academic record
-    // (we take the most recent record that is NOT for the target session)
-    const students = await this.prisma.student.findMany({
+    return session;
+  }
+
+  /**
+   * Eligible students: ACTIVE, kisi purane session me record hai,
+   * aur target session me abhi record nahi hai.
+   */
+  private async getEligibleStudents(sessionId: string) {
+    return this.prisma.student.findMany({
       where: {
-        status: 'ACTIVE',
-        academicRecords: {
-          some: {
-            academicSessionId: { not: session.id },
+        status: { equals: 'ACTIVE', mode: 'insensitive' },
+        AND: [
+          {
+            academicRecords: {
+              some: { academicSessionId: { not: sessionId } },
+            },
           },
-        },
+          { academicRecords: { none: { academicSessionId: sessionId } } },
+        ],
       },
       select: {
         id: true,
@@ -98,15 +103,13 @@ export class AcademicProgressionService {
           select: { id: true, name: true, programDuration: true },
         },
         academicRecords: {
-          where: { academicSessionId: { not: session.id } },
-          orderBy: { semester: { number: 'desc' } },
+          where: { academicSessionId: { not: sessionId } },
+          orderBy: { semesterNumber: 'desc' },
           take: 1,
           select: {
             semesterNumber: true,
             semesterId: true,
-            semester: {
-              select: { id: true, number: true, name: true },
-            },
+            semester: { select: { id: true, number: true, name: true } },
             sectionId: true,
             section: { select: { name: true } },
           },
@@ -114,37 +117,119 @@ export class AcademicProgressionService {
       },
       orderBy: [{ batch: { name: 'asc' } }, { stdRegNumber: 'asc' }],
     });
+  }
 
-    const previewStudents: ProgressionStudentPreview[] = students.map((s) => {
+  /**
+   * Student ka current aur default target semester number.
+   * Preview aur implement dono me same logic.
+   */
+  private computeSemesters(
+    latest: { semesterNumber: number; semester: { number: number } | null },
+    programDuration: number,
+  ) {
+    const current = latest.semester?.number ?? latest.semesterNumber;
+    const max = programDuration * 2; // 4 years -> 8 semesters
+    const target = Math.min(current + 1, max);
+    return { current, target };
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // PREVIEW (read only)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  async getPreview(
+    academicSessionId?: string,
+  ): Promise<ProgressionPreviewResponse> {
+    const session = await this.resolveSessionForProgression(academicSessionId);
+
+    const semesters = await this.prisma.semester.findMany({
+      select: { id: true, number: true, name: true },
+      orderBy: { number: 'asc' },
+    });
+    const semesterMap = new Map(semesters.map((s) => [s.number, s]));
+
+    const students = await this.getEligibleStudents(session.id);
+    console.log(
+      `Eligible students for session ${session.name}: ${students.length}`,
+    );
+
+    const batchMap = new Map<
+      string,
+      {
+        batchId: string;
+        batchName: string;
+        totalStudents: number;
+        transitions: Map<string, ProgressionTransitionPreview>;
+      }
+    >();
+
+    for (const s of students) {
       const latest = s.academicRecords[0];
-      const currentSemester = latest.semester?.number ?? latest.semesterNumber;
-      const maxSemester = s.batch.programDuration * 2; // e.g. 4 years → 8 semesters
+      const { current, target } = this.computeSemesters(
+        latest,
+        s.batch.programDuration,
+      );
 
-      const targetSemesterNumber = Math.min(currentSemester + 1, maxSemester);
-      const targetSemester = semesterMap.get(targetSemesterNumber);
+      const currentSem = semesterMap.get(current);
+      const targetSem = semesterMap.get(target);
 
-      return {
+      let batchBucket = batchMap.get(s.batch.id);
+      if (!batchBucket) {
+        batchBucket = {
+          batchId: s.batch.id,
+          batchName: s.batch.name,
+          totalStudents: 0,
+          transitions: new Map(),
+        };
+        batchMap.set(s.batch.id, batchBucket);
+      }
+
+      const key = `${current}:${target}`;
+      let transition = batchBucket.transitions.get(key);
+      if (!transition) {
+        transition = {
+          fromSemester: current,
+          fromSemesterId: latest.semester?.id ?? currentSem?.id ?? null,
+          fromSemesterName: latest.semester?.name ?? currentSem?.name ?? null,
+          toSemester: target,
+          toSemesterId: targetSem?.id ?? null,
+          toSemesterName: targetSem?.name ?? null,
+          isFinal: target === current,
+          missingTargetSemester: !targetSem,
+          count: 0,
+          students: [],
+        };
+        batchBucket.transitions.set(key, transition);
+      }
+
+      transition.students.push({
         studentId: s.id,
         regNumber: s.stdRegNumber,
         fullName: fullName(s.firstName, s.middleName, s.lastName),
-        batchId: s.batch.id,
-        batchName: s.batch.name,
-        currentSemester,
-        currentSemesterId: latest.semesterId,
-        currentSemesterName: latest.semester?.name ?? null,
-        targetSemester: targetSemesterNumber,
-        targetSemesterId: targetSemester?.id,
-        targetSemesterName: targetSemester?.name,
         currentSectionId: latest.sectionId,
         currentSectionName: latest.section?.name ?? null,
-      };
-    });
+      });
+      transition.count++;
+      batchBucket.totalStudents++;
+    }
+
+    const batches: ProgressionBatchPreview[] = [...batchMap.values()].map(
+      (b) => ({
+        batchId: b.batchId,
+        batchName: b.batchName,
+        totalStudents: b.totalStudents,
+        transitions: [...b.transitions.values()].sort(
+          (a, c) => a.fromSemester - c.fromSemester,
+        ),
+      }),
+    );
 
     return {
       academicSessionId: session.id,
       academicSessionName: session.name,
-      totalStudents: previewStudents.length,
-      students: previewStudents,
+      totalStudents: students.length,
+      totalBatches: batches.length,
+      batches,
     };
   }
 
@@ -153,148 +238,152 @@ export class AcademicProgressionService {
   // ══════════════════════════════════════════════════════════════════════════
 
   /**
-   * Creates new StudentAcademicRecords for the target session.
-   * - Uses previous sectionId (kept the same)
-   * - semesterNumber = previous + 1 (or manual adjustment)
-   * - Marks the session as progressed
+   * Eligible students ke liye naye StudentAcademicRecords banata hai,
+   * siwaye excluded students/groups ke.
+   * - Section wahi rehta hai jo pichle record me tha
+   * - Adjustment ho to wo default target ko override karta hai
+   * - Session ko progressed mark karta hai (atomic)
    */
   async implement(
     dto: ImplementProgressionDto,
   ): Promise<ImplementProgressionResponse> {
-    // Pre-fetch all semesters for ID mapping
+    const session = await this.resolveSessionForProgression(
+      dto.academicSessionId,
+    );
+
+    // ── Adjustments validate ────────────────────────────────────────────────
+    const adjustmentMap = new Map<string, number>();
+    for (const adj of dto.adjustments ?? []) {
+      if (adj.targetSemester < 1 || adj.targetSemester > 12) {
+        throw new BadRequestException(
+          `Invalid targetSemester ${adj.targetSemester} for student ${adj.studentId}`,
+        );
+      }
+      adjustmentMap.set(adj.studentId, adj.targetSemester);
+    }
+
+    // ── Exclusions ──────────────────────────────────────────────────────────
+    const excludedIds = new Set(dto.excludedStudentIds ?? []);
+    const excludedKeys = new Set(
+      (dto.excludedGroups ?? []).map((g) =>
+        groupKey(g.batchId, g.fromSemester, g.toSemester),
+      ),
+    );
+
+    // ── Semesters + eligible students (same logic as preview) ───────────────
     const semesters = await this.prisma.semester.findMany({
       select: { id: true, number: true },
-      orderBy: { number: 'asc' },
     });
     const semesterMap = new Map(semesters.map((s) => [s.number, s.id]));
 
-    const session = await this.prisma.academicSession.findUnique({
-      where: { id: dto.academicSessionId },
-      select: { id: true, name: true, status: true, progressed: true },
-    });
+    const students = await this.getEligibleStudents(session.id);
 
-    if (!session) {
-      throw new NotFoundException(
-        `Academic session ${dto.academicSessionId} not found`,
-      );
-    }
-
-    if (session.progressed) {
-      throw new ConflictException(
-        `Session "${session.name}" has already been progressed`,
-      );
-    }
-
-    // Build adjustment map
-    const adjustmentMap = new Map<string, number>();
-    if (dto.adjustments?.length) {
-      for (const adj of dto.adjustments) {
-        if (adj.targetSemester < 1 || adj.targetSemester > 12) {
-          throw new BadRequestException(
-            `Invalid targetSemester ${adj.targetSemester} for student ${adj.studentId}`,
-          );
-        }
-        adjustmentMap.set(adj.studentId, adj.targetSemester);
+    // Adjustment kisi non eligible student ke liye ho to error do
+    const eligibleIds = new Set(students.map((s) => s.id));
+    for (const studentId of adjustmentMap.keys()) {
+      if (!eligibleIds.has(studentId)) {
+        throw new BadRequestException(
+          `Adjustment given for student ${studentId} who is not eligible for progression`,
+        );
       }
     }
 
-    // Re-compute the same set of students (same logic as preview)
-    const students = await this.prisma.student.findMany({
-      where: {
-        status: 'ACTIVE',
-        academicRecords: {
-          some: {
-            academicSessionId: { not: session.id },
-          },
-        },
-      },
-      select: {
-        id: true,
-        batchId: true,
-        batch: { select: { programDuration: true } },
-        academicRecords: {
-          where: { academicSessionId: { not: session.id } },
-          orderBy: { semester: { number: 'desc' } },
-          take: 1,
-          select: {
-            semesterNumber: true,
-            semesterId: true,
-            semester: { select: { number: true } },
-            sectionId: true,
-          },
-        },
-      },
-    });
+    // ── Rows build karo (transaction se pehle, taake errors jaldi aayen) ────
+    const rows: {
+      studentId: string;
+      batchId: string;
+      academicSessionId: string;
+      semesterId: string;
+      semesterNumber: number;
+      sectionId: string;
+      status: StudentAcademicRecordStatus;
+    }[] = [];
+    let skippedCount = 0;
 
-    if (students.length === 0) {
-      throw new BadRequestException(
-        'No eligible students found for progression',
+    for (const s of students) {
+      const latest = s.academicRecords[0];
+      const { current, target: defaultTarget } = this.computeSemesters(
+        latest,
+        s.batch.programDuration,
       );
-    }
 
-    // Guard: none of them should already have a record for the target session
-    const alreadyEnrolled = await this.prisma.studentAcademicRecord.findMany({
-      where: {
+      // Group key hamesha default target se banta hai (preview me yehi tha),
+      // adjustment se nahi.
+      const key = groupKey(s.batchId, current, defaultTarget);
+      if (excludedIds.has(s.id) || excludedKeys.has(key)) {
+        skippedCount++;
+        continue;
+      }
+
+      const targetSemesterNumber = adjustmentMap.get(s.id) ?? defaultTarget;
+      const targetSemesterId = semesterMap.get(targetSemesterNumber);
+      if (!targetSemesterId) {
+        throw new BadRequestException(
+          `Semester ${targetSemesterNumber} not found in database`,
+        );
+      }
+
+      rows.push({
+        studentId: s.id,
+        batchId: s.batchId,
         academicSessionId: session.id,
-        studentId: { in: students.map((s) => s.id) },
-      },
-      select: { studentId: true },
-    });
+        semesterId: targetSemesterId,
+        semesterNumber: targetSemesterNumber, // backward compatibility
+        sectionId: latest.sectionId, // same section
+        status: StudentAcademicRecordStatus.ENROLLED,
+      });
+    }
 
-    if (alreadyEnrolled.length > 0) {
-      throw new ConflictException(
-        `${alreadyEnrolled.length} student(s) already have a record for this session. Aborting.`,
+    if (rows.length === 0) {
+      throw new BadRequestException(
+        students.length === 0
+          ? 'No eligible students found for progression'
+          : 'All eligible students were excluded, nothing to progress',
       );
     }
 
-    const createdCount = await this.prisma.$transaction(async (tx) => {
-      let count = 0;
-
-      for (const s of students) {
-        const latest = s.academicRecords[0];
-        const currentSemesterNumber =
-          latest.semester?.number ?? latest.semesterNumber;
-        const maxSemester = s.batch.programDuration * 2;
-
-        const targetSemesterNumber =
-          adjustmentMap.get(s.id) ??
-          Math.min(currentSemesterNumber + 1, maxSemester);
-
-        // Resolve semester ID
-        const targetSemesterId = semesterMap.get(targetSemesterNumber);
-        if (!targetSemesterId) {
-          throw new BadRequestException(
-            `Semester ${targetSemesterNumber} not found in database`,
+    // ── Write: ek transaction, createMany, atomic claim ─────────────────────
+    const createdCount = await this.prisma.$transaction(
+      async (tx) => {
+        // Double run se bachao
+        const claimed = await tx.academicSession.updateMany({
+          where: { id: session.id, progressed: false },
+          data: { progressed: true },
+        });
+        if (claimed.count === 0) {
+          throw new ConflictException(
+            `Session "${session.name}" has already been progressed`,
           );
         }
 
-        await tx.studentAcademicRecord.create({
-          data: {
-            studentId: s.id,
-            batchId: s.batchId,
-            academicSessionId: session.id,
-            semesterId: targetSemesterId,
-            semesterNumber: targetSemesterNumber, // Keep for backward compatibility
-            sectionId: latest.sectionId, // keep the same section
+        const studentIdsToPromote = rows.map((r) => r.studentId);
+
+        // Sirf ENROLLED status wale previous records ko PROMOTED karo
+        await tx.studentAcademicRecord.updateMany({
+          where: {
+            studentId: { in: studentIdsToPromote },
+            academicSessionId: { not: session.id },
             status: StudentAcademicRecordStatus.ENROLLED,
+          },
+          data: {
+            status: StudentAcademicRecordStatus.PROMOTED,
           },
         });
 
-        count++;
-      }
+        // Naye records create karo
+        const result = await tx.studentAcademicRecord.createMany({
+          data: rows,
+        });
 
-      // Mark session as progressed
-      await tx.academicSession.update({
-        where: { id: session.id },
-        data: { progressed: true },
-      });
-
-      return count;
-    });
+        return result.count;
+      },
+      { timeout: 30000 },
+    );
 
     return {
       message: `Progression completed successfully for session "${session.name}"`,
       createdCount,
+      skippedCount,
       academicSessionId: session.id,
     };
   }
