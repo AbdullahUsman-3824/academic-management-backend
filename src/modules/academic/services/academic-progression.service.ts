@@ -128,7 +128,7 @@ export class AcademicProgressionService {
     programDuration: number,
   ) {
     const current = latest.semester?.number ?? latest.semesterNumber;
-    const max = programDuration * 2; // 4 years -> 8 semesters
+    const max = programDuration * 2; // 5 years -> 10 semesters
     const target = Math.min(current + 1, max);
     return { current, target };
   }

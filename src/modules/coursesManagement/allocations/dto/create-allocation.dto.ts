@@ -1,4 +1,4 @@
-import { IsUUID, IsOptional } from 'class-validator';
+import { IsUUID, IsOptional, IsInt, Min, Max } from 'class-validator';
 
 export class CreateAllocationDto {
   @IsUUID('4')
@@ -10,8 +10,10 @@ export class CreateAllocationDto {
   @IsUUID('4')
   sectionId!: string;
 
-  @IsUUID('4')
-  semesterId!: string; // REQUIRED in UI
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  semesterNumber!: number; // Changed from semesterId to semesterNumber
 
   @IsUUID('4')
   @IsOptional()

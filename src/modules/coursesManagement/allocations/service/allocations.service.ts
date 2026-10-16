@@ -19,18 +19,24 @@ export class AllocationsService {
    * Create a single course allocation
    */
   async create(dto: CreateAllocationDto) {
+    // Validate semester number
+    if (dto.semesterNumber < 1 || dto.semesterNumber > 10) {
+      throw new BadRequestException('Semester number must be between 1 and 10');
+    }
+
     // Validate all foreign keys
-    const [course, faculty, section, semester] = await Promise.all([
+    const [course, faculty, section] = await Promise.all([
       this.prisma.course.findUnique({ where: { id: dto.courseId } }),
       this.prisma.faculty.findUnique({ where: { id: dto.facultyId } }),
-      this.prisma.section.findUnique({ where: { id: dto.sectionId } }),
-      this.prisma.semester.findUnique({ where: { id: dto.semesterId } }),
+      this.prisma.section.findUnique({
+        where: { id: dto.sectionId },
+        include: { batch: true },
+      }),
     ]);
 
     if (!course) throw new NotFoundException('Course not found');
     if (!faculty) throw new NotFoundException('Faculty not found');
     if (!section) throw new NotFoundException('Section not found');
-    if (!semester) throw new NotFoundException('Semester not found');
 
     // Get or validate academic session
     let academicSessionId = dto.academicSessionId;
@@ -45,17 +51,23 @@ export class AllocationsService {
       academicSessionId = activeSession.id;
     }
 
-    // Validate course is in semester
-    const semesterCourse = await this.prisma.semesterCourse.findFirst({
-      where: {
-        semesterId: dto.semesterId,
-        courseId: dto.courseId,
-      },
-    });
+    // Validate course is assigned to this batch/semester
+    const batchCourseAssignment =
+      await this.prisma.batchCourseAssignment.findFirst({
+        where: {
+          batchId: section.batchId,
+          courseId: dto.courseId,
+          semesterNumber: dto.semesterNumber,
+          OR: [
+            { sectionId: null }, // Batch-wide
+            { sectionId: dto.sectionId }, // Section-specific
+          ],
+        },
+      });
 
-    if (!semesterCourse) {
+    if (!batchCourseAssignment) {
       throw new BadRequestException(
-        `Course ${course.code} is not mapped to ${semester.displayName}`,
+        `Course ${course.code} is not assigned to ${section.batch.name} for Semester ${dto.semesterNumber}. Please assign the course to this batch first.`,
       );
     }
 
@@ -65,7 +77,7 @@ export class AllocationsService {
           courseId: dto.courseId,
           facultyId: dto.facultyId,
           sectionId: dto.sectionId,
-          semesterId: dto.semesterId,
+          semesterNumber: dto.semesterNumber,
           academicSessionId,
           status: 'active',
         },
@@ -100,14 +112,6 @@ export class AllocationsService {
               },
             },
           },
-          semester: {
-            select: {
-              id: true,
-              number: true,
-              name: true,
-              displayName: true,
-            },
-          },
           academicSession: {
             select: {
               id: true,
@@ -139,7 +143,7 @@ export class AllocationsService {
           facultyId: dto.facultyId,
           courseId,
           sectionId: dto.sectionId,
-          semesterId: dto.semesterId,
+          semesterNumber: dto.semesterNumber,
           academicSessionId: dto.academicSessionId,
         });
         results.push(allocation);
@@ -172,8 +176,9 @@ export class AllocationsService {
 
     if (query.facultyId) where.facultyId = query.facultyId;
     if (query.sectionId) where.sectionId = query.sectionId;
-    if (query.semesterId) where.semesterId = query.semesterId;
-    if (query.academicSessionId) where.academicSessionId = query.academicSessionId;
+    if (query.semesterNumber) where.semesterNumber = query.semesterNumber;
+    if (query.academicSessionId)
+      where.academicSessionId = query.academicSessionId;
 
     return this.prisma.courseAllocation.findMany({
       where,
@@ -208,14 +213,6 @@ export class AllocationsService {
             },
           },
         },
-        semester: {
-          select: {
-            id: true,
-            number: true,
-            name: true,
-            displayName: true,
-          },
-        },
         academicSession: {
           select: {
             id: true,
@@ -224,7 +221,7 @@ export class AllocationsService {
         },
       },
       orderBy: [
-        { semester: { number: 'asc' } },
+        { semesterNumber: 'asc' },
         { section: { name: 'asc' } },
         { course: { code: 'asc' } },
       ],
@@ -234,10 +231,27 @@ export class AllocationsService {
   /**
    * Get allocations for a specific section/semester (for admin to see what's assigned)
    */
-  async getAllocationsBySectionSemester(sectionId: string, semesterId: string) {
-    // Get courses in this semester
-    const semesterCourses = await this.prisma.semesterCourse.findMany({
-      where: { semesterId },
+  async getAllocationsBySectionSemester(
+    sectionId: string,
+    semesterNumber: number,
+  ) {
+    // Get section details
+    const section = await this.prisma.section.findUnique({
+      where: { id: sectionId },
+      include: { batch: true },
+    });
+
+    if (!section) {
+      throw new NotFoundException('Section not found');
+    }
+
+    // Get courses assigned to this batch/semester
+    const batchCourses = await this.prisma.batchCourseAssignment.findMany({
+      where: {
+        batchId: section.batchId,
+        semesterNumber,
+        OR: [{ sectionId: null }, { sectionId }],
+      },
       include: {
         course: true,
       },
@@ -245,14 +259,14 @@ export class AllocationsService {
     });
 
     // Get allocations for this section/semester
-    const allocations = await this.findAll({ sectionId, semesterId });
+    const allocations = await this.findAll({ sectionId, semesterNumber });
 
     // Map courses to allocations
-    return semesterCourses.map((sc) => {
-      const allocation = allocations.find((a) => a.courseId === sc.courseId);
+    return batchCourses.map((bc) => {
+      const allocation = allocations.find((a) => a.courseId === bc.courseId);
       return {
-        course: sc.course,
-        isCompulsory: sc.isCompulsory,
+        course: bc.course,
+        isCompulsory: bc.isCompulsory,
         allocation: allocation || null, // null if not assigned yet
       };
     });
@@ -272,7 +286,6 @@ export class AllocationsService {
             batch: true,
           },
         },
-        semester: true,
         academicSession: true,
       },
     });
@@ -294,49 +307,5 @@ export class AllocationsService {
       data: { status: 'inactive' },
     });
     return { id, message: 'Allocation removed successfully' };
-  }
-
-  /**
-   * Get faculty's teaching assignments (for faculty portal)
-   */
-  async getMyAllocations(facultyId: string, academicSessionId?: string) {
-    const where: any = {
-      facultyId,
-      status: 'active',
-    };
-
-    if (!academicSessionId) {
-      const activeSession = await this.prisma.academicSession.findFirst({
-        where: { status: 'ACTIVE' },
-      });
-      if (activeSession) {
-        where.academicSessionId = activeSession.id;
-      }
-    } else {
-      where.academicSessionId = academicSessionId;
-    }
-
-    return this.prisma.courseAllocation.findMany({
-      where,
-      include: {
-        course: true,
-        section: {
-          include: {
-            batch: true,
-          },
-        },
-        semester: true,
-        academicSession: true,
-        _count: {
-          select: {
-            assessments: true,
-          },
-        },
-      },
-      orderBy: [
-        { semester: { number: 'asc' } },
-        { course: { code: 'asc' } },
-      ],
-    });
   }
 }

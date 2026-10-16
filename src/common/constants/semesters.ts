@@ -63,4 +63,20 @@ export const SEMESTERS = [
     maxCredits: 21,
     isActive: true,
   },
+  {
+    number: 9,
+    name: 'Ninth Semester',
+    displayName: 'Semester 9',
+    minCredits: 12,
+    maxCredits: 21,
+    isActive: true,
+  },
+  {
+    number: 10,
+    name: 'Tenth Semester',
+    displayName: 'Semester 10',
+    minCredits: 12,
+    maxCredits: 21,
+    isActive: true,
+  },
 ] as const;

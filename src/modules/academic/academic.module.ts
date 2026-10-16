@@ -11,6 +11,7 @@ import { BatchService } from './services/batch.service';
 import { AcademicProgressionService } from './services/academic-progression.service';
 import { SectionService } from './services/section.service';
 import { StudentAcademicRecordService } from './services/student-academic-record.service';
+import { SemesterService } from './services/semester.service';
 import { DatabaseModule } from '../../database/database.module';
 import { SectionController } from './controllers/batch-sections.controller';
 
@@ -32,6 +33,7 @@ import { SectionController } from './controllers/batch-sections.controller';
     AcademicProgressionService,
     SectionService,
     StudentAcademicRecordService,
+    SemesterService,
   ],
   exports: [
     AcademicService,
@@ -41,6 +43,7 @@ import { SectionController } from './controllers/batch-sections.controller';
     AcademicProgressionService,
     SectionService,
     StudentAcademicRecordService,
+    SemesterService,
   ],
 })
 export class AcademicModule {}

@@ -5,6 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../../database/prisma.service';
+import { BatchCourseAssignmentsService } from '../../batch-courses/service/batch-course-assignments.service';
 import {
   CreateEnrollmentDto,
   UpdateEnrollmentStatusDto,
@@ -13,7 +14,10 @@ import {
 
 @Injectable()
 export class EnrollmentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly batchCourseService: BatchCourseAssignmentsService,
+  ) {}
 
   async create(dto: CreateEnrollmentDto) {
     // Verify student academic record exists
@@ -252,14 +256,107 @@ export class EnrollmentsService {
   }
 
   /**
-   * AUTO-ENROLL: Automatically enroll student in compulsory courses for their semester
+   * AUTO-ENROLL: Automatically enroll student in courses assigned to their batch/semester
+   * NEW: Uses BatchCourseAssignments instead of SemesterCourses
    * @param studentAcademicRecordId - The newly created StudentAcademicRecord ID
-   * @param semesterId - The semester UUID (CHANGED from semesterNumber)
+   * @param batchId - The student's batch ID
+   * @param semesterNumber - The semester number (1-10)
    * @param tx - Optional Prisma transaction client
+   */
+  async autoEnrollInBatchCourses(
+    studentAcademicRecordId: string,
+    batchId: string,
+    semesterNumber: number,
+    tx?: any,
+  ): Promise<{
+    created: Array<{
+      courseId: string;
+      courseCode: string;
+      courseName: string;
+      creditHours: number;
+    }>;
+    skipped: number;
+    errors: Array<{ courseId: string; error: string }>;
+  }> {
+    const prisma = tx || this.prisma;
+
+    try {
+      // Get courses assigned to this batch/semester
+      const batchCourses =
+        await this.batchCourseService.getCoursesForEnrollment(
+          batchId,
+          semesterNumber,
+        );
+
+      if (batchCourses.length === 0) {
+        console.warn(
+          `[AUTO-ENROLL] No courses assigned to Batch ${batchId}, Semester ${semesterNumber}`,
+        );
+        return { created: [], skipped: 0, errors: [] };
+      }
+
+      // Filter compulsory courses only
+      const compulsoryCourses = batchCourses.filter((c) => c.isCompulsory);
+
+      const created: any[] = [];
+      const errors: Array<{ courseId: string; error: string }> = [];
+      let skipped = 0;
+
+      for (const course of compulsoryCourses) {
+        try {
+          await prisma.courseEnrollment.create({
+            data: {
+              studentAcademicRecordId,
+              courseId: course.id,
+              status: 'enrolled',
+              isExtra: false,
+            },
+          });
+
+          created.push({
+            courseId: course.id,
+            courseCode: course.code,
+            courseName: course.name,
+            creditHours: course.creditHours,
+          });
+
+          console.log(
+            `[AUTO-ENROLL] ✓ ${course.code}: ${course.name} (Semester ${semesterNumber})`,
+          );
+        } catch (error: any) {
+          if (error.code === 'P2002') {
+            skipped++;
+            console.debug(
+              `[AUTO-ENROLL] ⊘ Student already enrolled in ${course.code}`,
+            );
+          } else {
+            errors.push({ courseId: course.id, error: error.message });
+            console.error(`[AUTO-ENROLL] ✗ ${course.code}: ${error.message}`);
+          }
+        }
+      }
+
+      console.log(
+        `[AUTO-ENROLL] Semester ${semesterNumber} complete: ` +
+          `${created.length} created, ${skipped} skipped, ${errors.length} errors`,
+      );
+
+      return { created, skipped, errors };
+    } catch (error: any) {
+      console.error('[AUTO-ENROLL] Fatal error:', error);
+      throw new BadRequestException(
+        `Auto-enrollment failed: ${error.message}`,
+      );
+    }
+  }
+
+  /**
+   * DEPRECATED: Old method using SemesterCourses
+   * Keep for backward compatibility during migration
    */
   async autoEnrollInSemesterCourses(
     studentAcademicRecordId: string,
-    semesterId: string, // CHANGED: UUID instead of Int
+    semesterId: string,
     tx?: any,
   ): Promise<{
     created: Array<{
@@ -273,10 +370,9 @@ export class EnrollmentsService {
   }> {
     const prisma = tx || this.prisma;
     try {
-      // CHANGED: Query by semesterId instead of semesterNumber
       const semesterCourses = await prisma.semesterCourse.findMany({
         where: {
-          semesterId, // CHANGED: UUID comparison
+          semesterId,
           isCompulsory: true,
         },
         include: {
@@ -290,7 +386,6 @@ export class EnrollmentsService {
             },
           },
           semester: {
-            // NEW: Include semester for logging
             select: {
               number: true,
               name: true,
@@ -306,7 +401,6 @@ export class EnrollmentsService {
       );
 
       if (activeCourses.length === 0) {
-        // CHANGED: Better logging with semester name
         const semesterName =
           semesterCourses[0]?.semester?.displayName ?? semesterId;
         console.warn(

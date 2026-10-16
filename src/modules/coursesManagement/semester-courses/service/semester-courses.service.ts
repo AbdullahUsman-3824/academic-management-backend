@@ -53,20 +53,35 @@ export class SemesterCoursesService {
   }
 
   async bulkCreate(dto: BulkSemesterCourseDto) {
-    const results: any[] = [];
-    for (const courseId of dto.courseIds) {
+    const success: any[] = [];
+    const errors: { courseId: string; error: string }[] = [];
+
+    for (const item of dto.courses) {
       try {
         const row = await this.create({
-          semesterId: dto.semesterId, // CHANGED
-          courseId,
-          isCompulsory: true,
+          semesterId: dto.semesterId,
+          courseId: item.courseId,
+          isCompulsory: item.isCompulsory ?? true,
+          displayOrder: item.displayOrder ?? 0,
         });
-        results.push(row);
-      } catch (error) {
-        // skip duplicates
+        success.push(row);
+      } catch (error: any) {
+        errors.push({
+          courseId: item.courseId,
+          error: error.message || 'Failed to create',
+        });
       }
     }
-    return results;
+
+    return {
+      success,
+      errors,
+      summary: {
+        total: dto.courses.length,
+        created: success.length,
+        failed: errors.length,
+      },
+    };
   }
 
   // NEW: Accept semesterId instead of semesterNumber

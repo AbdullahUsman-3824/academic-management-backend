@@ -14,7 +14,7 @@ type TxClient = Prisma.TransactionClient;
 
 const DEFAULT_PROGRAM_DURATION = process.env.DEFAULT_PROGRAM_DURATION
   ? parseInt(process.env.DEFAULT_PROGRAM_DURATION, 10)
-  : 4;
+  : 5;
 
 const DEFAULT_SECTION_CAPACITY = process.env.DEFAULT_SECTION_CAPACITY
   ? parseInt(process.env.DEFAULT_SECTION_CAPACITY, 10)

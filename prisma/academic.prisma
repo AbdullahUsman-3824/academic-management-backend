@@ -66,7 +66,7 @@ model Batch {
   id              String      @id @default(uuid()) @db.Uuid
   name            String      @unique // "2023"
   entryYearId     String      @map("entry_year_id") @db.Uuid
-  programDuration Int         @default(4) @map("program_duration") // years
+  programDuration Int         @default(5) @map("program_duration") // years (5 years = 10 semesters)
   sectionCapacity Int?        @map("section_capacity")
   status          BatchStatus @default(ACTIVE)
 
@@ -77,6 +77,7 @@ model Batch {
   sections               Section[]
   students               Student[]
   studentAcademicRecords StudentAcademicRecord[]
+  batchCourseAssignments BatchCourseAssignment[]
 
   @@index([entryYearId])
   @@map("batches")
@@ -91,9 +92,10 @@ model Section {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  batch             Batch                   @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  studentRecords    StudentAcademicRecord[]
-  courseAllocations CourseAllocation[]
+  batch                  Batch                   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  studentRecords         StudentAcademicRecord[]
+  courseAllocations      CourseAllocation[]
+  batchCourseAssignments BatchCourseAssignment[]
 
   @@unique([batchId, name])
   @@map("sections")
@@ -104,7 +106,7 @@ model StudentAcademicRecord {
   studentId         String                      @map("student_id") @db.Uuid
   batchId           String                      @map("batch_id") @db.Uuid
   academicSessionId String                      @map("academic_session_id") @db.Uuid
-  semesterNumber    Int                         @map("semester_number") // 1..8
+  semesterNumber    Int                         @map("semester_number") // 1..10
   sectionId         String                      @map("section_id") @db.Uuid
   status            StudentAcademicRecordStatus @default(ENROLLED)
   semesterId        String                      @map("semester_id") @db.Uuid
@@ -124,10 +126,9 @@ model StudentAcademicRecord {
   @@map("student_academic_records")
 }
 
-//Semester
 model Semester {
   id          String  @id @default(uuid()) @db.Uuid
-  number      Int     @unique // 1, 2, 3, 4, 5, 6, 7, 8
+  number      Int     @unique // 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
   name        String // "First Semester", "Second Semester"
   displayName String  @map("display_name") // "Semester 1", "Sem-I"
   minCredits  Int     @default(12) @map("min_credits")
@@ -138,9 +139,9 @@ model Semester {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  semesterCourses   SemesterCourse[]
-  studentRecords    StudentAcademicRecord[]
-  courseAllocations CourseAllocation[] // Optional
+  semesterCourses SemesterCourse[]
+  studentRecords  StudentAcademicRecord[]
+  // courseAllocations removed - now uses semesterNumber instead
 
   @@map("semesters")
 }

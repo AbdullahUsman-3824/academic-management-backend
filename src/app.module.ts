@@ -10,6 +10,7 @@ import { CoursesModule } from './modules/coursesManagement/courses/courses.modul
 import { EnrollmentsModule } from './modules/coursesManagement/enrollments/enrollments.module';
 import { AllocationsModule } from './modules/coursesManagement/allocations/allocations.module';
 import { SemesterCoursesModule } from './modules/coursesManagement/semester-courses/semester-courses.module';
+import { BatchCourseAssignmentsModule } from './modules/coursesManagement/batch-courses/batch-course-assignments.module';
 import { CategoriesModule } from './modules/assessments/categories/categories.module';
 import { AssessmentsModule } from './modules/assessments/assessments/assessments.module';
 import { MarksModule } from './modules/assessments/marks/marks.module';
@@ -28,6 +29,7 @@ import { AcademicModule } from './modules/academic/academic.module';
     EnrollmentsModule,
     AllocationsModule,
     SemesterCoursesModule,
+    BatchCourseAssignmentsModule,
     CategoriesModule,
     AssessmentsModule,
     MarksModule,

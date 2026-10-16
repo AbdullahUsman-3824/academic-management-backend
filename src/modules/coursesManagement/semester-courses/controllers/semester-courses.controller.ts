@@ -25,8 +25,12 @@ export class SemesterCoursesController {
   }
 
   @Post('bulk')
-  bulk(@Body() dto: BulkSemesterCourseDto) {
-    return this.service.bulkCreate(dto);
+  async bulk(@Body() dto: BulkSemesterCourseDto) {
+    const result = await this.service.bulkCreate(dto);
+    return {
+      success: true,
+      data: result,
+    };
   }
 
   @Get()
@@ -39,8 +43,12 @@ export class SemesterCoursesController {
 
   // NEW: Get courses by semester ID
   @Get('semester/:semesterId')
-  findBySemester(@Param('semesterId', ParseUUIDPipe) semesterId: string) {
-    return this.service.findBySemester(semesterId);
+  async findBySemester(@Param('semesterId', ParseUUIDPipe) semesterId: string) {
+    const data = await this.service.findBySemester(semesterId);
+    return {
+      success: true,
+      data,
+    };
   }
 
   // NEW: Get courses by semester number (convenience)

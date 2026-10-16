@@ -36,14 +36,14 @@ export class AllocationsController {
     return this.allocationsService.findAll(query);
   }
 
-  @Get('section/:sectionId/semester/:semesterId')
+  @Get('section/:sectionId/semester/:semesterNumber')
   getBySectionSemester(
     @Param('sectionId') sectionId: string,
-    @Param('semesterId') semesterId: string,
+    @Param('semesterNumber') semesterNumber: string,
   ) {
     return this.allocationsService.getAllocationsBySectionSemester(
       sectionId,
-      semesterId,
+      Number(semesterNumber),
     );
   }
 

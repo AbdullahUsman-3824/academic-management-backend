@@ -1,4 +1,4 @@
-import { IsUUID, IsOptional, IsArray } from 'class-validator';
+import { IsUUID, IsOptional, IsArray, IsInt, Min, Max } from 'class-validator';
 
 export class BulkAllocationDto {
   @IsUUID('4')
@@ -11,8 +11,10 @@ export class BulkAllocationDto {
   @IsUUID('4')
   sectionId!: string;
 
-  @IsUUID('4')
-  semesterId!: string;
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  semesterNumber!: number; // Changed from semesterId to semesterNumber
 
   @IsUUID('4')
   @IsOptional()

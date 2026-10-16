@@ -1,4 +1,5 @@
-import { IsUUID, IsOptional, IsString } from 'class-validator';
+import { IsUUID, IsOptional, IsString, IsInt, Min, Max } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class GetAllocationsQueryDto {
   @IsUUID('4')
@@ -9,9 +10,12 @@ export class GetAllocationsQueryDto {
   @IsOptional()
   sectionId?: string;
 
-  @IsUUID('4')
   @IsOptional()
-  semesterId?: string;
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  @Type(() => Number)
+  semesterNumber?: number; // Changed from semesterId to semesterNumber
 
   @IsUUID('4')
   @IsOptional()
