@@ -42,7 +42,7 @@ export class StudentsController {
 
   @Get()
   async findAll(@Query() query: QueryStudentsDto) {
-    const result = await this.studentsService.findAll(query);
+    const result = await this.studentsService.list(query);
     return {
       success: true,
       data: result.data,
