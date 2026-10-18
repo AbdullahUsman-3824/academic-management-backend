@@ -394,15 +394,25 @@ export class FacultyService {
       throw new NotFoundException('You do not have access to this allocation');
     }
 
-    // Count enrolled students
+    // Count enrolled students (both regular section students and extra course enrollments)
     const studentCount = await this.prisma.courseEnrollment.count({
       where: {
-        courseId: allocation.courseId,
-        studentAcademicRecord: {
-          sectionId: allocation.sectionId,
-          semesterNumber: allocation.semesterNumber,
-          academicSessionId: allocation.academicSessionId,
-        },
+        OR: [
+          // Regular students from this section
+          {
+            courseId: allocation.courseId,
+            studentAcademicRecord: {
+              sectionId: allocation.sectionId,
+              semesterNumber: allocation.semesterNumber,
+              academicSessionId: allocation.academicSessionId,
+            },
+          },
+          // Extra course students explicitly assigned to this allocation
+          {
+            allocationId: allocationId,
+            isExtra: true,
+          },
+        ],
         status: 'enrolled',
       },
     });
@@ -428,12 +438,23 @@ export class FacultyService {
 
     const enrollments = await this.prisma.courseEnrollment.findMany({
       where: {
-        courseId: allocation.courseId,
-        studentAcademicRecord: {
-          sectionId: allocation.sectionId,
-          semesterNumber: allocation.semesterNumber,
-          academicSessionId: allocation.academicSessionId,
-        },
+        OR: [
+          // Regular students from this section
+          {
+            courseId: allocation.courseId,
+            studentAcademicRecord: {
+              sectionId: allocation.sectionId,
+              semesterNumber: allocation.semesterNumber,
+              academicSessionId: allocation.academicSessionId,
+            },
+          },
+          // Extra course students explicitly assigned to this allocation
+          {
+            allocationId: allocationId,
+            isExtra: true,
+          },
+        ],
+        status: 'enrolled',
       },
       include: {
         studentAcademicRecord: {

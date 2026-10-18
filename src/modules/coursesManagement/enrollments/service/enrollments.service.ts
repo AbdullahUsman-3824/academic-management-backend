@@ -20,9 +20,60 @@ export class EnrollmentsService {
   ) {}
 
   async create(dto: CreateEnrollmentDto) {
+    let studentAcademicRecordId = dto.studentAcademicRecordId;
+
+    // If studentId is provided instead of studentAcademicRecordId, look up the academic record
+    if (!studentAcademicRecordId && dto.studentId) {
+      // Get active academic session
+      const activeSession = await this.prisma.academicSession.findFirst({
+        where: { status: 'ACTIVE' },
+        orderBy: { startDate: 'desc' },
+      });
+
+      if (!activeSession) {
+        throw new BadRequestException(
+          'No active academic session found. Please activate a session in Academic Management first.',
+        );
+      }
+
+      // Find student's academic record for the active session
+      const academicRecord = await this.prisma.studentAcademicRecord.findFirst({
+        where: {
+          studentId: dto.studentId,
+          academicSessionId: activeSession.id,
+        },
+        include: {
+          student: {
+            select: {
+              id: true,
+              batchId: true,
+              stdRegNumber: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
+      });
+
+      if (!academicRecord) {
+        throw new BadRequestException(
+          'Student does not have an academic record for the current session. Please ensure the student is enrolled in a batch and section for the active academic session.',
+        );
+      }
+
+      studentAcademicRecordId = academicRecord.id;
+    }
+
+    // Validate that we have a studentAcademicRecordId
+    if (!studentAcademicRecordId) {
+      throw new BadRequestException(
+        'Either studentAcademicRecordId or studentId must be provided',
+      );
+    }
+
     // Verify student academic record exists
     const studentRecord = await this.prisma.studentAcademicRecord.findUnique({
-      where: { id: dto.studentAcademicRecordId },
+      where: { id: studentAcademicRecordId },
       include: {
         student: {
           select: {
@@ -89,7 +140,7 @@ export class EnrollmentsService {
     try {
       return await this.prisma.courseEnrollment.create({
         data: {
-          studentAcademicRecordId: dto.studentAcademicRecordId,
+          studentAcademicRecordId,
           courseId: dto.courseId,
           isExtra: dto.isExtra ?? false,
           allocationId: dto.allocationId,
@@ -146,6 +197,7 @@ export class EnrollmentsService {
       try {
         const enrollment = await this.create({
           studentAcademicRecordId: dto.studentAcademicRecordId,
+          studentId: dto.studentId,
           courseId,
           isExtra: dto.isExtra,
         });
@@ -163,7 +215,7 @@ export class EnrollmentsService {
       errors,
       summary: {
         total: dto.courseIds.length,
-        enrolled: results.length,
+        created: results.length,
         failed: errors.length,
       },
     };

@@ -2,7 +2,12 @@ import { IsUUID, IsString, IsBoolean, IsOptional, IsIn } from 'class-validator';
 
 export class CreateEnrollmentDto {
   @IsUUID()
-  studentAcademicRecordId!: string;
+  @IsOptional()
+  studentAcademicRecordId?: string;
+
+  @IsUUID()
+  @IsOptional()
+  studentId?: string; // Alternative to studentAcademicRecordId - backend will look up academic record
 
   @IsUUID()
   courseId!: string;
@@ -24,7 +29,12 @@ export class UpdateEnrollmentStatusDto {
 
 export class BulkEnrollDto {
   @IsUUID()
-  studentAcademicRecordId!: string;
+  @IsOptional()
+  studentAcademicRecordId?: string;
+
+  @IsUUID()
+  @IsOptional()
+  studentId?: string; // Alternative to studentAcademicRecordId
 
   @IsUUID('4', { each: true })
   courseIds!: string[];
