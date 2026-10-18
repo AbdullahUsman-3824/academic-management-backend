@@ -22,11 +22,31 @@ import type {
 import { Prisma } from '../../../../generated/prisma/client';
 import type { CellValue } from 'exceljs';
 
-type StudentWithRelations = Prisma.StudentGetPayload<{
-  include: {
-    batch: { select: { id: true; name: true } };
-    user: { select: { id: true; username: true } };
-  };
+const latestRecordSelect = {
+  orderBy: { academicSession: { startDate: 'desc' } },
+  take: 1,
+  select: {
+    semesterNumber: true,
+    section: { select: { name: true } },
+    academicSession: { select: { name: true } },
+  },
+} satisfies Prisma.Student$academicRecordsArgs;
+
+const listInclude = {
+  batch: { select: { id: true, name: true } },
+  academicRecords: latestRecordSelect,
+} satisfies Prisma.StudentInclude;
+
+const detailInclude = {
+  ...listInclude,
+  user: {
+    select: { id: true, username: true, status: true, lastLoginAt: true },
+  },
+} satisfies Prisma.StudentInclude;
+
+type StudentListRow = Prisma.StudentGetPayload<{ include: typeof listInclude }>;
+type StudentDetailRow = Prisma.StudentGetPayload<{
+  include: typeof detailInclude;
 }>;
 
 @Injectable()
@@ -143,7 +163,7 @@ export class StudentsService {
 
   // ── List ──────────────────────────────────────────────────────────────────
 
-  async findAll(query: QueryStudentsDto): Promise<PaginatedStudents> {
+  async list(query: QueryStudentsDto): Promise<PaginatedStudents> {
     const page = query.page ?? 1;
     const limit = Math.min(Math.max(1, query.limit ?? 20), 100);
     const skip = (page - 1) * limit;
@@ -180,10 +200,7 @@ export class StudentsService {
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: {
-          batch: { select: { id: true, name: true } },
-          user: { select: { id: true, username: true } },
-        },
+        include: listInclude,
       }),
       this.prisma.student.count({ where }),
     ]);
@@ -204,10 +221,7 @@ export class StudentsService {
   async findOne(id: string): Promise<StudentDetail> {
     const student = await this.prisma.student.findUnique({
       where: { id },
-      include: {
-        batch: { select: { id: true, name: true } },
-        user: { select: { id: true, username: true } },
-      },
+      include: detailInclude,
     });
 
     if (!student) {
@@ -274,10 +288,7 @@ export class StudentsService {
             admissionDate: new Date(dto.admissionDate),
           }),
         },
-        include: {
-          batch: { select: { id: true, name: true } },
-          user: { select: { id: true, username: true } },
-        },
+        include: detailInclude,
       });
       return this.toDetail(student);
     });
@@ -710,27 +721,29 @@ export class StudentsService {
 
   // ── Private Helpers ───────────────────────────────────────
 
-  private toListItem(s: StudentWithRelations): StudentListItem {
+  private toListItem(s: StudentListRow): StudentListItem {
+    const record = s.academicRecords[0];
+
     return {
       id: s.id,
-      userId: s.userId ?? s.user?.id,
-      username: s.user?.username ?? s.stdRegNumber,
       stdRegNumber: s.stdRegNumber,
-      firstName: s.firstName,
-      middleName: s.middleName,
-      lastName: s.lastName,
+      fullName: [s.firstName, s.middleName, s.lastName]
+        .filter(Boolean)
+        .join(' '),
       email: s.email,
       phone: s.phone,
-      gender: s.gender,
-      batch: s.batch ? { id: s.batch.id, name: s.batch.name } : null,
-      status: s.status,
-      admissionDate: s.admissionDate ?? new Date(),
+      batchName: s.batch?.name ?? null,
+      currentSemester: record?.semesterNumber ?? null,
+      currentSection: record?.section.name ?? null,
+      status: s.status as StudentStatus,
+      admissionDate: s.admissionDate,
     };
   }
 
-  private toDetail(s: StudentWithRelations): StudentDetail {
+  private toDetail(s: StudentDetailRow): StudentDetail {
     return {
       ...this.toListItem(s),
+      gender: s.gender,
       dateOfBirth: s.dateOfBirth,
       cnic: s.cnic,
       profileImageUrl: s.profileImageUrl,
@@ -740,6 +753,11 @@ export class StudentsService {
       guardianRelation: s.guardianRelation,
       guardianPhone: s.guardianPhone,
       guardianCnic: s.guardianCnic,
+      username: s.user.username,
+      accountStatus: s.user.status,
+      lastLoginAt: s.user.lastLoginAt,
+      currentAcademicSession:
+        s.academicRecords[0]?.academicSession.name ?? null,
       createdAt: s.createdAt,
       updatedAt: s.updatedAt,
     };
