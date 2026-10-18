@@ -68,15 +68,16 @@ export class UpdateBatchCourseAssignmentDto {
 }
 
 export class GetBatchCoursesQueryDto {
-  @IsUUID()
+  @IsUUID('4')
   batchId: string;
 
   @IsOptional()
-  @IsUUID()
+  @IsUUID('4')
   sectionId?: string;
 
   @IsOptional()
   @IsInt()
+  @Type(() => Number)
   @Min(1)
   @Max(10)
   semesterNumber?: number;

@@ -1,4 +1,4 @@
-import { IsUUID, IsOptional, IsInt, Min, Max } from 'class-validator';
+import { IsUUID } from 'class-validator';
 
 export class CreateAllocationDto {
   @IsUUID('4')
@@ -10,12 +10,6 @@ export class CreateAllocationDto {
   @IsUUID('4')
   sectionId!: string;
 
-  @IsInt()
-  @Min(1)
-  @Max(10)
-  semesterNumber!: number; // Changed from semesterId to semesterNumber
-
-  @IsUUID('4')
-  @IsOptional()
-  academicSessionId?: string; // Optional - defaults to active session
+  // semesterNumber removed - automatically derived from section's current semester
+  // academicSessionId removed - always uses active session from Academic Management
 }

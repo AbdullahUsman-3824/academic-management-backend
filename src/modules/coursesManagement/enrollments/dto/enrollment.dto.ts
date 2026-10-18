@@ -2,28 +2,32 @@ import { IsUUID, IsString, IsBoolean, IsOptional, IsIn } from 'class-validator';
 
 export class CreateEnrollmentDto {
   @IsUUID()
-  studentAcademicRecordId: string;
+  studentAcademicRecordId!: string;
 
   @IsUUID()
-  courseId: string;
+  courseId!: string;
 
   @IsBoolean()
   @IsOptional()
   isExtra?: boolean;
+
+  @IsUUID()
+  @IsOptional()
+  allocationId?: string; // Required when isExtra is true
 }
 
 export class UpdateEnrollmentStatusDto {
   @IsString()
   @IsIn(['enrolled', 'dropped', 'completed', 'failed', 'reappear'])
-  status: string;
+  status!: string;
 }
 
 export class BulkEnrollDto {
   @IsUUID()
-  studentAcademicRecordId: string;
+  studentAcademicRecordId!: string;
 
   @IsUUID('4', { each: true })
-  courseIds: string[];
+  courseIds!: string[];
 
   @IsBoolean()
   @IsOptional()

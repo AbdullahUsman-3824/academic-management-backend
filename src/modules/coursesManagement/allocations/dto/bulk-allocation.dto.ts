@@ -1,4 +1,4 @@
-import { IsUUID, IsOptional, IsArray, IsInt, Min, Max } from 'class-validator';
+import { IsUUID, IsArray } from 'class-validator';
 
 export class BulkAllocationDto {
   @IsUUID('4')
@@ -11,12 +11,6 @@ export class BulkAllocationDto {
   @IsUUID('4')
   sectionId!: string;
 
-  @IsInt()
-  @Min(1)
-  @Max(10)
-  semesterNumber!: number; // Changed from semesterId to semesterNumber
-
-  @IsUUID('4')
-  @IsOptional()
-  academicSessionId?: string;
+  // semesterNumber removed - automatically derived from section's current semester
+  // academicSessionId removed - always uses active session from Academic Management
 }

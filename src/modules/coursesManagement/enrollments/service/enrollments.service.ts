@@ -23,6 +23,14 @@ export class EnrollmentsService {
     // Verify student academic record exists
     const studentRecord = await this.prisma.studentAcademicRecord.findUnique({
       where: { id: dto.studentAcademicRecordId },
+      include: {
+        student: {
+          select: {
+            id: true,
+            batchId: true,
+          },
+        },
+      },
     });
     if (!studentRecord) {
       throw new NotFoundException('Student academic record not found');
@@ -36,16 +44,76 @@ export class EnrollmentsService {
       throw new NotFoundException('Course not found');
     }
 
+    // If this is an extra course, validate and require allocationId
+    if (dto.isExtra) {
+      if (!dto.allocationId) {
+        throw new BadRequestException(
+          'allocationId is required for extra course enrollments',
+        );
+      }
+
+      // Verify allocation exists and is active
+      const allocation = await this.prisma.courseAllocation.findUnique({
+        where: { id: dto.allocationId },
+        include: {
+          section: {
+            include: {
+              batch: true,
+            },
+          },
+          faculty: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
+      });
+
+      if (!allocation) {
+        throw new NotFoundException('Course allocation not found');
+      }
+
+      if (allocation.status !== 'active') {
+        throw new BadRequestException('Selected allocation is not active');
+      }
+
+      if (allocation.courseId !== dto.courseId) {
+        throw new BadRequestException(
+          'Allocation does not match the selected course',
+        );
+      }
+    }
+
     try {
       return await this.prisma.courseEnrollment.create({
         data: {
           studentAcademicRecordId: dto.studentAcademicRecordId,
           courseId: dto.courseId,
           isExtra: dto.isExtra ?? false,
+          allocationId: dto.allocationId,
           status: 'enrolled',
         },
         include: {
           course: true,
+          allocation: {
+            include: {
+              section: {
+                include: {
+                  batch: true,
+                },
+              },
+              faculty: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  employeeNumber: true,
+                },
+              },
+            },
+          },
           studentAcademicRecord: {
             include: {
               student: {
@@ -106,20 +174,98 @@ export class EnrollmentsService {
     studentAcademicRecordId?: string;
     courseId?: string;
     status?: string;
+    search?: string;
+    batchId?: string;
+    sectionId?: string;
+    studentStatus?: string;
+    page?: number;
+    limit?: number;
   }) {
-    return this.prisma.courseEnrollment.findMany({
-      where: {
-        studentAcademicRecordId: filters?.studentAcademicRecordId,
-        courseId: filters?.courseId,
-        status: filters?.status,
-        ...(filters?.studentId && {
-          studentAcademicRecord: {
-            studentId: filters.studentId,
-          },
-        }),
-      },
+    // Always filter by active session
+    const activeSession = await this.prisma.academicSession.findFirst({
+      where: { status: 'ACTIVE' },
+      orderBy: { startDate: 'desc' },
+    });
+
+    const search = filters?.search?.trim();
+    const hasSearch = !!search && search.length >= 2;
+
+    // Build student record filters
+    const studentRecordWhere: any = {
+      ...(activeSession && { academicSessionId: activeSession.id }),
+      ...(filters?.studentId && { studentId: filters.studentId }),
+      ...(filters?.sectionId && { sectionId: filters.sectionId }),
+    };
+
+    // Only add student filters if any are provided
+    const hasStudentFilters = hasSearch || filters?.batchId || filters?.studentStatus;
+    
+    if (hasStudentFilters) {
+      const studentWhere: any = {};
+      
+      if (filters?.batchId) {
+        studentWhere.batchId = filters.batchId;
+      }
+      
+      if (filters?.studentStatus) {
+        studentWhere.status = filters.studentStatus;
+      }
+      
+      if (hasSearch) {
+        studentWhere.OR = [
+          { firstName: { contains: search, mode: 'insensitive' } },
+          { middleName: { contains: search, mode: 'insensitive' } },
+          { lastName: { contains: search, mode: 'insensitive' } },
+          { stdRegNumber: { contains: search, mode: 'insensitive' } },
+          { cnic: { contains: search, mode: 'insensitive' } },
+        ];
+      }
+      
+      studentRecordWhere.student = studentWhere;
+    }
+
+    const where = {
+      studentAcademicRecordId: filters?.studentAcademicRecordId,
+      courseId: filters?.courseId,
+      status: filters?.status,
+      studentAcademicRecord: studentRecordWhere,
+    };
+
+    // Pagination
+    const page = filters?.page || 1;
+    const limit = filters?.limit || 20;
+    const skip = (page - 1) * limit;
+
+    // Get total count
+    const total = await this.prisma.courseEnrollment.count({ where });
+
+    // Get paginated data
+    const enrollments = await this.prisma.courseEnrollment.findMany({
+      where,
       include: {
         course: true,
+        allocation: {
+          include: {
+            section: {
+              include: {
+                batch: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
+              },
+            },
+            faculty: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                employeeNumber: true,
+              },
+            },
+          },
+        },
         studentAcademicRecord: {
           include: {
             student: {
@@ -128,6 +274,16 @@ export class EnrollmentsService {
                 stdRegNumber: true,
                 firstName: true,
                 lastName: true,
+                middleName: true,
+                cnic: true,
+                status: true,
+                batchId: true,
+                batch: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
               },
             },
             academicSession: true,
@@ -137,7 +293,35 @@ export class EnrollmentsService {
       orderBy: {
         createdAt: 'desc',
       },
+      skip,
+      take: limit,
     });
+
+    // Map stdRegNumber to studentNumber for frontend compatibility
+    const data = enrollments.map((enrollment) => ({
+      ...enrollment,
+      studentAcademicRecord: enrollment.studentAcademicRecord
+        ? {
+            ...enrollment.studentAcademicRecord,
+            student: enrollment.studentAcademicRecord.student
+              ? {
+                  ...enrollment.studentAcademicRecord.student,
+                  studentNumber: enrollment.studentAcademicRecord.student.stdRegNumber,
+                }
+              : undefined,
+          }
+        : undefined,
+    }));
+
+    return {
+      data,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 
   async findOne(id: string) {
@@ -253,6 +437,90 @@ export class EnrollmentsService {
     };
 
     return stats;
+  }
+
+  /**
+   * Get available course allocations for extra course enrollment
+   * Returns all active sections teaching the specified course
+   */
+  async getAvailableAllocations(courseId: string) {
+    // Verify course exists
+    const course = await this.prisma.course.findUnique({
+      where: { id: courseId },
+    });
+    if (!course) {
+      throw new NotFoundException('Course not found');
+    }
+
+    // Get active academic session
+    const activeSession = await this.prisma.academicSession.findFirst({
+      where: { status: 'ACTIVE' },
+      orderBy: { startDate: 'desc' },
+    });
+
+    if (!activeSession) {
+      throw new BadRequestException('No active academic session found');
+    }
+
+    // Find all active allocations for this course in the current session
+    const allocations = await this.prisma.courseAllocation.findMany({
+      where: {
+        courseId,
+        academicSessionId: activeSession.id,
+        status: 'active',
+      },
+      include: {
+        section: {
+          include: {
+            batch: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+        faculty: {
+          select: {
+            id: true,
+            employeeNumber: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        course: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            creditHours: true,
+          },
+        },
+      },
+      orderBy: [
+        { section: { batch: { name: 'asc' } } },
+        { section: { name: 'asc' } },
+      ],
+    });
+
+    // Transform to include helpful info
+    return allocations.map((alloc) => ({
+      id: alloc.id,
+      courseId: alloc.courseId,
+      course: alloc.course,
+      semesterNumber: alloc.semesterNumber,
+      section: {
+        id: alloc.section.id,
+        name: alloc.section.name,
+        batch: alloc.section.batch,
+      },
+      faculty: {
+        id: alloc.faculty.id,
+        employeeNumber: alloc.faculty.employeeNumber,
+        name: `${alloc.faculty.firstName} ${alloc.faculty.lastName}`,
+      },
+      displayText: `Batch ${alloc.section.batch.name} - Section ${alloc.section.name} - Semester ${alloc.semesterNumber} (${alloc.faculty.firstName} ${alloc.faculty.lastName})`,
+    }));
   }
 
   /**
@@ -463,4 +731,184 @@ export class EnrollmentsService {
       );
     }
   }
+
+  /**
+   * BULK RE-ENROLLMENT: Find students with missing enrollments and enroll them
+   * Useful for fixing data after batch course assignments are updated
+   */
+  async bulkReEnrollStudents(options?: {
+    batchId?: string;
+    academicSessionId?: string;
+    dryRun?: boolean;
+  }) {
+    const dryRun = options?.dryRun ?? false;
+
+    // Get active session if not provided
+    let sessionId = options?.academicSessionId;
+    if (!sessionId) {
+      const activeSession = await this.prisma.academicSession.findFirst({
+        where: { status: 'ACTIVE' },
+        orderBy: { startDate: 'desc' },
+      });
+      if (!activeSession) {
+        throw new BadRequestException('No active academic session found');
+      }
+      sessionId = activeSession.id;
+    }
+
+    // Build filter for academic records
+    const recordWhere: any = {
+      academicSessionId: sessionId,
+      status: 'ENROLLED',
+    };
+    if (options?.batchId) {
+      recordWhere.batchId = options.batchId;
+    }
+
+    // Find all active academic records
+    const academicRecords = await this.prisma.studentAcademicRecord.findMany({
+      where: recordWhere,
+      include: {
+        student: {
+          select: {
+            id: true,
+            stdRegNumber: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        _count: {
+          select: {
+            courseEnrollments: true,
+          },
+        },
+      },
+    });
+
+    console.log(
+      `[BULK RE-ENROLL] Found ${academicRecords.length} student records`,
+    );
+
+    const results: Array<{
+      studentId: string;
+      studentName: string;
+      studentNumber: string;
+      recordId: string;
+      batchId: string;
+      semesterNumber: number;
+      enrollmentsBefore: number;
+      enrollmentsCreated: number;
+      coursesEnrolled: Array<{
+        courseCode: string;
+        courseName: string;
+      }>;
+      errors: Array<{ courseId: string; error: string }>;
+    }> = [];
+
+    let totalEnrollmentsCreated = 0;
+    let studentsProcessed = 0;
+    const globalErrors: Array<{ studentId: string; error: string }> = [];
+
+    for (const record of academicRecords) {
+      try {
+        const enrollmentsBefore = record._count.courseEnrollments;
+
+        // Skip if student already has enrollments (unless they have 0)
+        if (enrollmentsBefore > 0) {
+          console.log(
+            `[BULK RE-ENROLL] Skipping ${record.student.stdRegNumber} - already has ${enrollmentsBefore} enrollments`,
+          );
+          continue;
+        }
+
+        if (dryRun) {
+          // Dry run: just check what would be enrolled
+          const batchCourses =
+            await this.batchCourseService.getCoursesForEnrollment(
+              record.batchId,
+              record.semesterNumber,
+            );
+          const compulsoryCourses = batchCourses.filter((c) => c.isCompulsory);
+
+          results.push({
+            studentId: record.studentId,
+            studentName: `${record.student.firstName} ${record.student.lastName}`,
+            studentNumber: record.student.stdRegNumber,
+            recordId: record.id,
+            batchId: record.batchId,
+            semesterNumber: record.semesterNumber,
+            enrollmentsBefore,
+            enrollmentsCreated: compulsoryCourses.length,
+            coursesEnrolled: compulsoryCourses.map((c) => ({
+              courseCode: c.code,
+              courseName: c.name,
+            })),
+            errors: [],
+          });
+
+          totalEnrollmentsCreated += compulsoryCourses.length;
+          studentsProcessed++;
+        } else {
+          // Actual enrollment
+          const enrollResult = await this.autoEnrollInBatchCourses(
+            record.id,
+            record.batchId,
+            record.semesterNumber,
+          );
+
+          results.push({
+            studentId: record.studentId,
+            studentName: `${record.student.firstName} ${record.student.lastName}`,
+            studentNumber: record.student.stdRegNumber,
+            recordId: record.id,
+            batchId: record.batchId,
+            semesterNumber: record.semesterNumber,
+            enrollmentsBefore,
+            enrollmentsCreated: enrollResult.created.length,
+            coursesEnrolled: enrollResult.created.map((c) => ({
+              courseCode: c.courseCode,
+              courseName: c.courseName,
+            })),
+            errors: enrollResult.errors,
+          });
+
+          totalEnrollmentsCreated += enrollResult.created.length;
+          studentsProcessed++;
+
+          console.log(
+            `[BULK RE-ENROLL] ✓ ${record.student.stdRegNumber}: ${enrollResult.created.length} courses enrolled`,
+          );
+        }
+      } catch (error: any) {
+        console.error(
+          `[BULK RE-ENROLL] ✗ ${record.student.stdRegNumber}: ${error.message}`,
+        );
+        globalErrors.push({
+          studentId: record.studentId,
+          error: error.message,
+        });
+      }
+    }
+
+    const summary = {
+      dryRun,
+      totalStudentsFound: academicRecords.length,
+      studentsProcessed,
+      studentsSkipped: academicRecords.length - studentsProcessed,
+      totalEnrollmentsCreated,
+      totalErrors: globalErrors.length,
+    };
+
+    console.log(
+      `[BULK RE-ENROLL] Summary: ${studentsProcessed} students processed, ${totalEnrollmentsCreated} enrollments created`,
+    );
+
+    return {
+      success: true,
+      summary,
+      students: results,
+      errors: globalErrors,
+    };
+  }
+
 }

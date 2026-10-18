@@ -25,6 +25,7 @@ model CourseEnrollment {
   id                      String    @id @default(uuid()) @db.Uuid
   studentAcademicRecordId String    @map("student_academic_record_id") @db.Uuid
   courseId                String    @map("course_id") @db.Uuid
+  allocationId            String?   @map("allocation_id") @db.Uuid // Links to specific teacher/section for extra courses
   status                  String    @default("enrolled") // enrolled | dropped | completed | failed | reappear
   isExtra                 Boolean   @default(false) @map("is_extra") // true when Admin adds extra or reappear subject
   enrolledAt              DateTime  @default(now()) @map("enrolled_at")
@@ -34,9 +35,11 @@ model CourseEnrollment {
 
   studentAcademicRecord StudentAcademicRecord @relation(fields: [studentAcademicRecordId], references: [id])
   course                Course                @relation(fields: [courseId], references: [id])
+  allocation            CourseAllocation?     @relation(fields: [allocationId], references: [id])
   courseResults         StudentCourseResult[]
 
   @@unique([studentAcademicRecordId, courseId])
+  @@index([allocationId])
   @@map("course_enrollments")
 }
 
@@ -51,11 +54,12 @@ model CourseAllocation {
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime? @updatedAt @map("updated_at")
 
-  course          Course          @relation(fields: [courseId], references: [id])
-  faculty         Faculty         @relation(fields: [facultyId], references: [id])
-  section         Section         @relation(fields: [sectionId], references: [id])
-  academicSession AcademicSession @relation(fields: [academicSessionId], references: [id])
-  assessments     Assessment[]
+  course            Course             @relation(fields: [courseId], references: [id])
+  faculty           Faculty            @relation(fields: [facultyId], references: [id])
+  section           Section            @relation(fields: [sectionId], references: [id])
+  academicSession   AcademicSession    @relation(fields: [academicSessionId], references: [id])
+  assessments       Assessment[]
+  courseEnrollments CourseEnrollment[] // Extra course enrollments linked to this allocation
 
   // One teacher per course per section per session
   @@unique([courseId, facultyId, sectionId, academicSessionId])

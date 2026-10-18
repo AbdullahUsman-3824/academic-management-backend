@@ -16,11 +16,58 @@ import { UpdateFacultyDto } from '../dto/update-faculty.dto';
 import { QueryFacultyDto } from '../dto/query-faculty.dto';
 import { UpdateFacultyStatusDto } from '../dto/update-faculty-status.dto';
 import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
+import { CurrentUser } from '../../../../common/decorators/current-user.decorator';
+import type { SafeUser } from '../../../../common/types/user';
 
 @Controller('faculty')
 @UseGuards(JwtAuthGuard)
 export class FacultyController {
   constructor(private readonly facultyService: FacultyService) {}
+
+  @Get('me')
+  async getMyProfile(@CurrentUser() user: SafeUser) {
+    const data = await this.facultyService.findByUserId(user.id);
+    return { success: true, data };
+  }
+
+  @Get('me/teaching-load')
+  async getMyTeachingLoad(
+    @CurrentUser() user: SafeUser,
+    @Query('academicSessionId') academicSessionId?: string,
+  ) {
+    const faculty = await this.facultyService.findByUserId(user.id);
+    const data = await this.facultyService.getTeachingLoad(
+      faculty.id,
+      academicSessionId,
+    );
+    return { success: true, data };
+  }
+
+  @Get('me/allocations/:allocationId')
+  async getMyAllocationDetails(
+    @CurrentUser() user: SafeUser,
+    @Param('allocationId', ParseUUIDPipe) allocationId: string,
+  ) {
+    const faculty = await this.facultyService.findByUserId(user.id);
+    const data = await this.facultyService.getAllocationDetails(
+      faculty.id,
+      allocationId,
+    );
+    return { success: true, data };
+  }
+
+  @Get('me/allocations/:allocationId/students')
+  async getMyAllocationStudents(
+    @CurrentUser() user: SafeUser,
+    @Param('allocationId', ParseUUIDPipe) allocationId: string,
+  ) {
+    const faculty = await this.facultyService.findByUserId(user.id);
+    const data = await this.facultyService.getAllocationStudents(
+      faculty.id,
+      allocationId,
+    );
+    return { success: true, data };
+  }
 
   @Post()
   async create(@Body() createFacultyDto: CreateFacultyDto) {

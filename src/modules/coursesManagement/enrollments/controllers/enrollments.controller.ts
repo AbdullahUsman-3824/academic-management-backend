@@ -15,6 +15,7 @@ import {
   UpdateEnrollmentStatusDto,
   BulkEnrollDto,
 } from '../dto/enrollment.dto';
+import { GetEnrollmentsQueryDto } from '../dto/get-enrollments-query.dto';
 import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
 // TODO: Implement PermissionsGuard and Permissions decorator
 // import { PermissionsGuard } from '../../../../common/guards/permissions.guard';
@@ -27,71 +28,101 @@ export class EnrollmentsController {
 
   @Post()
   // @Permissions('enrollments:create')
-  create(@Body() createEnrollmentDto: CreateEnrollmentDto) {
-    return this.enrollmentsService.create(createEnrollmentDto);
+  async create(@Body() createEnrollmentDto: CreateEnrollmentDto) {
+    const data = await this.enrollmentsService.create(createEnrollmentDto);
+    return { success: true, data };
   }
 
   @Post('bulk')
   // @Permissions('enrollments:create')
-  bulkEnroll(@Body() bulkEnrollDto: BulkEnrollDto) {
-    return this.enrollmentsService.bulkEnroll(bulkEnrollDto);
+  async bulkEnroll(@Body() bulkEnrollDto: BulkEnrollDto) {
+    const data = await this.enrollmentsService.bulkEnroll(bulkEnrollDto);
+    return { success: true, data };
+  }
+
+  @Post('bulk-re-enroll')
+  // @Permissions('enrollments:create')
+  async bulkReEnroll(
+    @Body()
+    body: {
+      batchId?: string;
+      academicSessionId?: string;
+      dryRun?: boolean;
+    },
+  ) {
+    const data = await this.enrollmentsService.bulkReEnrollStudents(body);
+    return {
+      success: true,
+      message: body.dryRun
+        ? 'Bulk re-enrollment preview completed'
+        : 'Bulk re-enrollment completed',
+      data,
+    };
   }
 
   @Get()
   // @Permissions('enrollments:read')
-  findAll(
-    @Query('studentId') studentId?: string,
-    @Query('studentAcademicRecordId') studentAcademicRecordId?: string,
-    @Query('courseId') courseId?: string,
-    @Query('status') status?: string,
-  ) {
-    return this.enrollmentsService.findAll({
-      studentId,
-      studentAcademicRecordId,
-      courseId,
-      status,
-    });
+  async findAll(@Query() query: GetEnrollmentsQueryDto) {
+    const result = await this.enrollmentsService.findAll(query);
+    return {
+      success: true,
+      data: result.data,
+      pagination: result.pagination,
+    };
+  }
+
+  @Get('available-allocations/:courseId')
+  // @Permissions('enrollments:read')
+  async getAvailableAllocations(@Param('courseId') courseId: string) {
+    const data = await this.enrollmentsService.getAvailableAllocations(courseId);
+    return { success: true, data };
   }
 
   @Get('student/:studentId')
   // @Permissions('enrollments:read')
-  findByStudent(
+  async findByStudent(
     @Param('studentId') studentId: string,
     @Query('academicSessionId') academicSessionId?: string,
   ) {
-    return this.enrollmentsService.findByStudent(studentId, academicSessionId);
+    const data = await this.enrollmentsService.findByStudent(studentId, academicSessionId);
+    return { success: true, data };
   }
 
   @Get('stats/:studentAcademicRecordId')
   // @Permissions('enrollments:read')
-  getStats(@Param('studentAcademicRecordId') studentAcademicRecordId: string) {
-    return this.enrollmentsService.getEnrollmentStats(studentAcademicRecordId);
+  async getStats(@Param('studentAcademicRecordId') studentAcademicRecordId: string) {
+    const data = await this.enrollmentsService.getEnrollmentStats(studentAcademicRecordId);
+    return { success: true, data };
   }
 
   @Get(':id')
   // @Permissions('enrollments:read')
-  findOne(@Param('id') id: string) {
-    return this.enrollmentsService.findOne(id);
+  async findOne(@Param('id') id: string) {
+    const data = await this.enrollmentsService.findOne(id);
+    return { success: true, data };
   }
 
   @Patch(':id/status')
   // @Permissions('enrollments:update')
-  updateStatus(
+  async updateStatus(
     @Param('id') id: string,
     @Body() updateStatusDto: UpdateEnrollmentStatusDto,
   ) {
-    return this.enrollmentsService.updateStatus(id, updateStatusDto);
+    const data = await this.enrollmentsService.updateStatus(id, updateStatusDto);
+    return { success: true, data };
   }
 
   @Patch(':id/drop')
   // @Permissions('enrollments:update')
-  drop(@Param('id') id: string) {
-    return this.enrollmentsService.drop(id);
+  async drop(@Param('id') id: string) {
+    const data = await this.enrollmentsService.drop(id);
+    return { success: true, data };
   }
 
   @Delete(':id')
   // @Permissions('enrollments:delete')
-  remove(@Param('id') id: string) {
-    return this.enrollmentsService.remove(id);
+  async remove(@Param('id') id: string) {
+    const data = await this.enrollmentsService.remove(id);
+    return { success: true, data };
   }
 }

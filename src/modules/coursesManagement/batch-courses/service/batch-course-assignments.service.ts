@@ -176,9 +176,16 @@ export class BatchCourseAssignmentsService {
       batchId: query.batchId,
     };
 
-    // Only filter by sectionId if provided (undefined means all sections)
+    // Section filtering logic:
+    // - If sectionId provided: show batch-wide (null) OR section-specific courses
+    // - If no sectionId: show only batch-wide (null) courses
     if (query.sectionId !== undefined) {
-      where.sectionId = query.sectionId;
+      where.OR = [
+        { sectionId: null }, // Batch-wide courses
+        { sectionId: query.sectionId }, // Section-specific courses
+      ];
+    } else {
+      where.sectionId = null; // Only batch-wide courses
     }
 
     // Only filter by semesterNumber if provided

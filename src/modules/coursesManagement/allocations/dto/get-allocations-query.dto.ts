@@ -17,11 +17,22 @@ export class GetAllocationsQueryDto {
   @Type(() => Number)
   semesterNumber?: number; // Changed from semesterId to semesterNumber
 
-  @IsUUID('4')
-  @IsOptional()
-  academicSessionId?: string;
+  // academicSessionId removed - queries always use active session
 
   @IsString()
   @IsOptional()
   status?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  page?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  @Type(() => Number)
+  limit?: number;
 }

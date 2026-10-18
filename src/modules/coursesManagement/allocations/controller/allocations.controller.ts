@@ -21,39 +21,81 @@ import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
 export class AllocationsController {
   constructor(private readonly allocationsService: AllocationsService) {}
 
+  @Get('assigned-courses/:batchId/:semesterNumber')
+  // @Permissions('allocations:read')
+  async getAssignedCourses(
+    @Param('batchId') batchId: string,
+    @Param('semesterNumber') semesterNumber: string,
+    @Query('sectionId') sectionId?: string,
+  ) {
+    const data = await this.allocationsService.getAssignedCourses(
+      batchId,
+      parseInt(semesterNumber, 10),
+      sectionId,
+    );
+    return { success: true, data };
+  }
+
   @Post()
-  create(@Body() dto: CreateAllocationDto) {
-    return this.allocationsService.create(dto);
+  async create(@Body() dto: CreateAllocationDto) {
+    const data = await this.allocationsService.create(dto);
+    return {
+      success: true,
+      message: 'Allocation created successfully',
+      data,
+    };
   }
 
   @Post('bulk')
-  bulkCreate(@Body() dto: BulkAllocationDto) {
-    return this.allocationsService.bulkCreate(dto);
+  async bulkCreate(@Body() dto: BulkAllocationDto) {
+    const data = await this.allocationsService.bulkCreate(dto);
+    return {
+      success: true,
+      message: 'Bulk allocations processed',
+      data,
+    };
   }
 
   @Get()
-  findAll(@Query() query: GetAllocationsQueryDto) {
-    return this.allocationsService.findAll(query);
+  async findAll(@Query() query: GetAllocationsQueryDto) {
+    const result = await this.allocationsService.findAll(query);
+    return {
+      success: true,
+      data: result.data,
+      pagination: result.pagination,
+    };
   }
 
   @Get('section/:sectionId/semester/:semesterNumber')
-  getBySectionSemester(
+  async getBySectionSemester(
     @Param('sectionId') sectionId: string,
     @Param('semesterNumber') semesterNumber: string,
   ) {
-    return this.allocationsService.getAllocationsBySectionSemester(
+    const data = await this.allocationsService.getAllocationsBySectionSemester(
       sectionId,
       Number(semesterNumber),
     );
+    return {
+      success: true,
+      data,
+    };
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.allocationsService.findOne(id);
+  async findOne(@Param('id') id: string) {
+    const data = await this.allocationsService.findOne(id);
+    return {
+      success: true,
+      data,
+    };
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.allocationsService.remove(id);
+  async remove(@Param('id') id: string) {
+    const result = await this.allocationsService.remove(id);
+    return {
+      success: true,
+      message: result.message,
+    };
   }
 }

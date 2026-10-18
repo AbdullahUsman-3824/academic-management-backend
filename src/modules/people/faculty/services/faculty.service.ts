@@ -28,30 +28,57 @@ export class FacultyService {
   ) {}
 
   async create(dto: CreateFacultyDto): Promise<FacultyDetail> {
+    console.log('[FacultyService.create] Incoming DTO:', {
+      employeeNumber: dto.employeeNumber,
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      username: dto.username,
+      cnic: dto.cnic,
+    });
+
     const facultyRole = await this.roleService.findByName(ROLES.FACULTY);
     const defaultPassword = process.env.DEFAULT_FACULTY_PASSWORD || 'faculty123';
 
     return this.prisma.$transaction(async (tx) => {
+      // Normalize employee number and username for consistent checking
+      const normalizedEmployeeNumber = dto.employeeNumber.toUpperCase();
+      const normalizedUsername = (dto.username || dto.employeeNumber).toLowerCase();
+
+      console.log('[FacultyService.create] Normalized values:', {
+        normalizedEmployeeNumber,
+        normalizedUsername,
+      });
+
       // 1. Check for existing records
       const [existingFaculty, existingUser] = await Promise.all([
         tx.faculty.findFirst({
           where: {
             OR: [
-              { employeeNumber: dto.employeeNumber },
+              { employeeNumber: normalizedEmployeeNumber },
               ...(dto.cnic ? [{ cnic: dto.cnic }] : []),
             ],
           },
         }),
         tx.user.findUnique({
           where: {
-            username: dto.username || dto.employeeNumber.toLowerCase(),
+            username: normalizedUsername,
           },
         }),
       ]);
 
-      if (existingFaculty?.employeeNumber === dto.employeeNumber) {
+      console.log('[FacultyService.create] Existing records check:', {
+        existingFaculty: existingFaculty
+          ? {
+              employeeNumber: existingFaculty.employeeNumber,
+              cnic: existingFaculty.cnic,
+            }
+          : null,
+        existingUser: existingUser ? { username: existingUser.username } : null,
+      });
+
+      if (existingFaculty?.employeeNumber === normalizedEmployeeNumber) {
         throw new ConflictException(
-          `Faculty with employee number ${dto.employeeNumber} already exists`,
+          `Faculty with employee number ${normalizedEmployeeNumber} already exists`,
         );
       }
 
@@ -61,25 +88,28 @@ export class FacultyService {
 
       if (existingUser) {
         throw new ConflictException(
-          `Username ${dto.username || dto.employeeNumber} already exists`,
+          `Username ${normalizedUsername} already exists`,
         );
       }
 
       // 2. Create user
+      console.log('[FacultyService.create] Creating user...');
       const user = await this.userService.create(
         {
-          username: (dto.username || dto.employeeNumber).toLowerCase(),
+          username: normalizedUsername,
           password: dto.password || defaultPassword,
           roleId: facultyRole.id,
         },
         tx,
       );
+      console.log(`[FacultyService.create] User created: ${user.id}`);
 
       // 3. Create faculty
+      console.log('[FacultyService.create] Creating faculty record...');
       const faculty = await tx.faculty.create({
         data: {
           userId: user.id,
-          employeeNumber: dto.employeeNumber.toUpperCase(),
+          employeeNumber: normalizedEmployeeNumber,
           firstName: dto.firstName,
           middleName: dto.middleName,
           lastName: dto.lastName,
@@ -95,8 +125,28 @@ export class FacultyService {
           joiningDate: dto.joiningDate ? new Date(dto.joiningDate) : undefined,
         },
       });
+      console.log(`[FacultyService.create] Faculty created: ${faculty.id}`);
 
-      return this.findOne(faculty.id);
+      console.log('[FacultyService.create] Fetching complete faculty details...');
+      // Fetch within the same transaction to ensure data consistency
+      const result = await tx.faculty.findUnique({
+        where: { id: faculty.id },
+        include: {
+          user: {
+            select: {
+              id: true,
+              username: true,
+            },
+          },
+        },
+      });
+
+      if (!result) {
+        throw new BadRequestException('Failed to create faculty record');
+      }
+
+      console.log('[FacultyService.create] ✅ Success! Returning faculty data');
+      return result as FacultyDetail;
     });
   }
 
@@ -174,6 +224,26 @@ export class FacultyService {
 
     if (!faculty) {
       throw new NotFoundException(`Faculty with ID ${id} not found`);
+    }
+
+    return faculty as FacultyDetail;
+  }
+
+  async findByUserId(userId: string): Promise<FacultyDetail> {
+    const faculty = await this.prisma.faculty.findUnique({
+      where: { userId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+          },
+        },
+      },
+    });
+
+    if (!faculty) {
+      throw new NotFoundException('Faculty profile not found');
     }
 
     return faculty as FacultyDetail;
@@ -292,5 +362,109 @@ export class FacultyService {
       totalCourses: allocations.length,
       totalCreditHours,
     };
+  }
+
+  async getAllocationDetails(facultyId: string, allocationId: string) {
+    const allocation = await this.prisma.courseAllocation.findUnique({
+      where: { id: allocationId },
+      include: {
+        course: true,
+        section: {
+          include: {
+            batch: true,
+          },
+        },
+        academicSession: true,
+        faculty: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            employeeNumber: true,
+          },
+        },
+      },
+    });
+
+    if (!allocation) {
+      throw new NotFoundException('Course allocation not found');
+    }
+
+    if (allocation.facultyId !== facultyId) {
+      throw new NotFoundException('You do not have access to this allocation');
+    }
+
+    // Count enrolled students
+    const studentCount = await this.prisma.courseEnrollment.count({
+      where: {
+        courseId: allocation.courseId,
+        studentAcademicRecord: {
+          sectionId: allocation.sectionId,
+          semesterNumber: allocation.semesterNumber,
+          academicSessionId: allocation.academicSessionId,
+        },
+        status: 'enrolled',
+      },
+    });
+
+    return {
+      ...allocation,
+      studentCount,
+    };
+  }
+
+  async getAllocationStudents(facultyId: string, allocationId: string) {
+    const allocation = await this.prisma.courseAllocation.findUnique({
+      where: { id: allocationId },
+    });
+
+    if (!allocation) {
+      throw new NotFoundException('Course allocation not found');
+    }
+
+    if (allocation.facultyId !== facultyId) {
+      throw new NotFoundException('You do not have access to this allocation');
+    }
+
+    const enrollments = await this.prisma.courseEnrollment.findMany({
+      where: {
+        courseId: allocation.courseId,
+        studentAcademicRecord: {
+          sectionId: allocation.sectionId,
+          semesterNumber: allocation.semesterNumber,
+          academicSessionId: allocation.academicSessionId,
+        },
+      },
+      include: {
+        studentAcademicRecord: {
+          include: {
+            student: {
+              select: {
+                id: true,
+                stdRegNumber: true,
+                firstName: true,
+                middleName: true,
+                lastName: true,
+                email: true,
+                phone: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        studentAcademicRecord: {
+          student: {
+            stdRegNumber: 'asc',
+          },
+        },
+      },
+    });
+
+    return enrollments.map((enrollment) => ({
+      enrollmentId: enrollment.id,
+      status: enrollment.status,
+      student: enrollment.studentAcademicRecord.student,
+    }));
   }
 }

@@ -14,9 +14,10 @@ import { StudentAcademicRecordService } from './services/student-academic-record
 import { SemesterService } from './services/semester.service';
 import { DatabaseModule } from '../../database/database.module';
 import { SectionController } from './controllers/batch-sections.controller';
+import { EnrollmentsModule } from '../coursesManagement/enrollments/enrollments.module';
 
 @Module({
-  imports: [DatabaseModule],
+  imports: [DatabaseModule, EnrollmentsModule],
   controllers: [
     AcademicController,
     AcademicYearController,

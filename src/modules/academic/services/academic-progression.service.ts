@@ -375,6 +375,11 @@ export class AcademicProgressionService {
           data: rows,
         });
 
+        // NOTE: Auto-enrollment for progressed students should be triggered
+        // after this transaction completes. Use the bulk re-enrollment endpoint
+        // to enroll progressed students in their new semester courses.
+        // TODO: Refactor to use individual creates and auto-enroll within transaction
+
         return result.count;
       },
       { timeout: 30000 },
