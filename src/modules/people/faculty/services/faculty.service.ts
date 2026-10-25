@@ -37,12 +37,15 @@ export class FacultyService {
     });
 
     const facultyRole = await this.roleService.findByName(ROLES.FACULTY);
-    const defaultPassword = process.env.DEFAULT_FACULTY_PASSWORD || 'faculty123';
+    const defaultPassword =
+      process.env.DEFAULT_FACULTY_PASSWORD || 'faculty123';
 
     return this.prisma.$transaction(async (tx) => {
       // Normalize employee number and username for consistent checking
       const normalizedEmployeeNumber = dto.employeeNumber.toUpperCase();
-      const normalizedUsername = (dto.username || dto.employeeNumber).toLowerCase();
+      const normalizedUsername = (
+        dto.username || dto.employeeNumber
+      ).toLowerCase();
 
       console.log('[FacultyService.create] Normalized values:', {
         normalizedEmployeeNumber,
@@ -127,7 +130,9 @@ export class FacultyService {
       });
       console.log(`[FacultyService.create] Faculty created: ${faculty.id}`);
 
-      console.log('[FacultyService.create] Fetching complete faculty details...');
+      console.log(
+        '[FacultyService.create] Fetching complete faculty details...',
+      );
       // Fetch within the same transaction to ensure data consistency
       const result = await tx.faculty.findUnique({
         where: { id: faculty.id },
@@ -226,7 +231,7 @@ export class FacultyService {
       throw new NotFoundException(`Faculty with ID ${id} not found`);
     }
 
-    return faculty as FacultyDetail;
+    return faculty;
   }
 
   async findByUserId(userId: string): Promise<FacultyDetail> {

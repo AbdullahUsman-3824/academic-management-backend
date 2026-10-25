@@ -71,3 +71,14 @@ export interface BulkEnrollResult {
     errors: string[];
   }>;
 }
+
+export interface StudentCourseOption {
+  id: string;
+  code: string;
+  name: string;
+}
+
+export interface StudentCourseDetails extends StudentCourseOption {
+  creditHours: number;
+  facultyName: string | null;
+}
