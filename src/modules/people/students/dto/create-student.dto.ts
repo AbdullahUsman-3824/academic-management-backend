@@ -7,12 +7,29 @@ import {
   IsDateString,
   IsEnum,
   MaxLength,
+  Max,
+  Min,
+  IsInt,
 } from 'class-validator';
 import { Gender } from '../enums/student-status.enum';
 
 export class CreateStudentDto {
   @IsUUID()
   batchId!: string;
+
+  @IsOptional()
+  @IsUUID()
+  academicSessionId?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(12)
+  semesterNumber?: number;
+
+  @IsOptional()
+  @IsUUID()
+  sectionId?: string | null;
 
   @IsString()
   @IsNotEmpty()

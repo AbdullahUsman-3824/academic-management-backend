@@ -5,7 +5,8 @@ import {
   IsEnum,
   IsOptional,
 } from 'class-validator';
-import { AcademicSessionStatus } from '../enums/academic-status.enum';
+import { AcademicSessionStatus } from '../../../generated/prisma/client';
+import { PartialType } from '@nestjs/mapped-types';
 
 export class CreateAcademicSessionDto {
   @IsUUID()
@@ -24,3 +25,7 @@ export class CreateAcademicSessionDto {
   @IsEnum(AcademicSessionStatus)
   status?: AcademicSessionStatus;
 }
+
+export class UpdateAcademicSessionDto extends PartialType(
+  CreateAcademicSessionDto,
+) {}

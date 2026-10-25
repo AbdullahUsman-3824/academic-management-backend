@@ -76,3 +76,4 @@ Thumbs.db
 #.data/
 
 /src/generated/prisma
+manual-semester-migration.sql

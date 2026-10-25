@@ -4,11 +4,16 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
-import { UpdateAcademicSessionDto } from '../dto/update-academic-session.dto';
-import { CreateAcademicSessionDto } from '../dto/create-academic-session.dto';
+import {
+  CreateAcademicSessionDto,
+  UpdateAcademicSessionDto,
+} from '../dto/academic-session.dto';
 import { AcademicSessionResponse } from '../types/academic.types';
-import { AcademicSessionStatus } from '../enums/academic-status.enum';
 import { Prisma } from '../../../generated/prisma/client';
+import {
+  AcademicSessionStatus,
+  AcademicYearStatus,
+} from '../../../generated/prisma/enums';
 
 type TxClient = Prisma.TransactionClient;
 
@@ -16,6 +21,11 @@ type TxClient = Prisma.TransactionClient;
 export class AcademicSessionsService {
   constructor(private prisma: PrismaService) {}
 
+  /**
+   * Create is only called from setup.
+   * Status is forced by the setup flow (first by date → upcoming, second → inactive).
+   * Any previously active session is marked completed when a new setup runs.
+   */
   async create(
     dto: CreateAcademicSessionDto,
     tx?: TxClient,
@@ -38,13 +48,13 @@ export class AcademicSessionsService {
         name: dto.name,
         startDate: new Date(dto.startDate),
         endDate: new Date(dto.endDate),
-        status: dto.status ?? 'upcoming',
+        status: dto.status ?? AcademicSessionStatus.INACTIVE,
       },
     });
 
     return {
       ...session,
-      status: session.status as AcademicSessionStatus,
+      status: session.status,
     };
   }
 
@@ -54,18 +64,51 @@ export class AcademicSessionsService {
   }) {
     const { status, academicYearId } = params || {};
 
-    return this.prisma.academicSession.findMany({
+    if (status && !Object.values(AcademicSessionStatus).includes(status)) {
+      throw new BadRequestException(
+        `Invalid status "${status}". Allowed values: ${Object.values(AcademicSessionStatus).join(', ')}`,
+      );
+    }
+
+    const sessions = await this.prisma.academicSession.findMany({
       where: {
         ...(status && { status }),
         ...(academicYearId && { academicYearId }),
-      },
-      orderBy: {
-        startDate: 'desc',
       },
       include: {
         academicYear: true,
       },
     });
+
+    return this.sortSessions(sessions);
+  }
+
+  /**
+   * Lightweight list – only id + name
+   */
+  async listForSelect(params?: {
+    academicYearId?: string;
+    status?: AcademicSessionStatus;
+  }) {
+    const { academicYearId, status } = params || {};
+
+    const sessions = await this.prisma.academicSession.findMany({
+      where: {
+        ...(academicYearId && { academicYearId }),
+        ...(status && { status }),
+      },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        startDate: true,
+      },
+    });
+
+    return this.sortSessions(sessions).map((s) => ({
+      id: s.id,
+      name: s.name,
+    }));
   }
 
   async findOne(id: string) {
@@ -83,8 +126,39 @@ export class AcademicSessionsService {
     return session;
   }
 
+  /**
+   * Edit rules:
+   * - upcoming / inactive → full edit (name + dates)
+   * - active → only name can be changed; dates locked
+   * - completed / cancelled → no edits
+   */
   async update(id: string, dto: UpdateAcademicSessionDto) {
-    await this.findOne(id);
+    const session = await this.findOne(id);
+
+    if (
+      session.status === AcademicSessionStatus.COMPLETED ||
+      session.status === AcademicSessionStatus.CANCELLED
+    ) {
+      throw new BadRequestException(
+        `Cannot edit a session with status "${session.status}"`,
+      );
+    }
+
+    if (
+      session.status === AcademicSessionStatus.ACTIVE &&
+      (dto.startDate !== undefined || dto.endDate !== undefined)
+    ) {
+      throw new BadRequestException(
+        'Cannot change dates of an active session. Only name can be updated.',
+      );
+    }
+
+    // Status changes must go through activate() / complete() — not free-form update
+    if (dto.status !== undefined) {
+      throw new BadRequestException(
+        'Status cannot be changed via update. Use activate or complete endpoints.',
+      );
+    }
 
     const data: Prisma.AcademicSessionUpdateInput = {
       ...(dto.name !== undefined && { name: dto.name }),
@@ -92,7 +166,6 @@ export class AcademicSessionsService {
         startDate: new Date(dto.startDate),
       }),
       ...(dto.endDate !== undefined && { endDate: new Date(dto.endDate) }),
-      ...(dto.status !== undefined && { status: dto.status }),
       ...(dto.academicYearId !== undefined && {
         academicYear: { connect: { id: dto.academicYearId } },
       }),
@@ -112,57 +185,154 @@ export class AcademicSessionsService {
     });
   }
 
+  /**
+   * Only an UPCOMING session can be activated.
+   * Side-effects:
+   *  1. Mark any other active session (same year or globally) as completed
+   *  2. Set this session → active
+   *  3. Set its academic year → active
+   *  4. Promote the next chronological session of the same year from inactive → upcoming
+   */
   async activate(id: string) {
     const session = await this.findOne(id);
 
-    if (session.status === 'active') {
+    if (session.status === AcademicSessionStatus.ACTIVE) {
       throw new BadRequestException('Session is already active');
     }
 
-    if (session.status === 'completed' || session.status === 'cancelled') {
+    if (session.status !== AcademicSessionStatus.UPCOMING) {
       throw new BadRequestException(
-        `Cannot activate a session with status "${session.status}"`,
+        `Only upcoming sessions can be activated. Current status: "${session.status}"`,
       );
     }
 
-    // Deactivate any other active session in the same academic year
-    await this.prisma.academicSession.updateMany({
-      where: {
-        academicYearId: session.academicYearId,
-        status: 'active',
-        id: { not: id },
-      },
-      data: {
-        status: 'completed',
-      },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Complete any currently active session (across all years)
+      await tx.academicSession.updateMany({
+        where: {
+          status: AcademicSessionStatus.ACTIVE,
+          id: { not: id },
+        },
+        data: { status: AcademicSessionStatus.COMPLETED },
+      });
 
-    return this.prisma.academicSession.update({
-      where: { id },
-      data: {
-        status: 'active',
-      },
+      // 2. Activate this session
+      const activated = await tx.academicSession.update({
+        where: { id },
+        data: { status: AcademicSessionStatus.ACTIVE },
+      });
+
+      // 3. Activate the parent year
+      await tx.academicYear.update({
+        where: { id: session.academicYearId },
+        data: { status: AcademicYearStatus.ACTIVE },
+      });
+
+      // 4. Promote the next session (by startDate) of the same year from inactive → upcoming
+      const nextSession = await tx.academicSession.findFirst({
+        where: {
+          academicYearId: session.academicYearId,
+          status: AcademicSessionStatus.INACTIVE,
+          startDate: { gt: session.startDate },
+        },
+        orderBy: { startDate: 'asc' },
+      });
+
+      if (nextSession) {
+        await tx.academicSession.update({
+          where: { id: nextSession.id },
+          data: { status: AcademicSessionStatus.UPCOMING },
+        });
+      }
+
+      return activated;
     });
   }
 
+  /**
+   * Only an ACTIVE session can be completed.
+   * Side-effects (one-click cascade):
+   *  1. This session → completed
+   *  2. The next UPCOMING session of the same year → active
+   *  3. If no next session remains (both done) → year → completed
+   *     else the session after that (if any) stays / becomes upcoming
+   */
   async complete(id: string) {
     const session = await this.findOne(id);
 
-    if (session.status === 'completed') {
+    if (session.status === AcademicSessionStatus.COMPLETED) {
       throw new BadRequestException('Session is already completed');
     }
 
-    if (session.status !== 'active') {
+    if (session.status !== AcademicSessionStatus.ACTIVE) {
       throw new BadRequestException(
         `Only active sessions can be completed. Current status: "${session.status}"`,
       );
     }
 
-    return this.prisma.academicSession.update({
-      where: { id },
-      data: {
-        status: 'active',
-      },
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Complete this session
+      const completed = await tx.academicSession.update({
+        where: { id },
+        data: { status: AcademicSessionStatus.COMPLETED },
+      });
+
+      // 2. Find next upcoming session of the same year and activate it
+      const nextSession = await tx.academicSession.findFirst({
+        where: {
+          academicYearId: session.academicYearId,
+          status: AcademicSessionStatus.UPCOMING,
+          startDate: { gt: session.startDate },
+        },
+        orderBy: { startDate: 'asc' },
+      });
+
+      if (nextSession) {
+        await tx.academicSession.update({
+          where: { id: nextSession.id },
+          data: { status: AcademicSessionStatus.ACTIVE },
+        });
+        // Year stays active
+      } else {
+        // Both sessions of the year are now completed → mark year completed
+        await tx.academicYear.update({
+          where: { id: session.academicYearId },
+          data: { status: AcademicYearStatus.COMPLETED },
+        });
+      }
+
+      return completed;
+    });
+  }
+
+  // Private helpers
+  private static readonly STATUS_PRIORITY: Record<
+    AcademicSessionStatus,
+    number
+  > = {
+    ACTIVE: 0,
+    UPCOMING: 1,
+    INACTIVE: 2,
+    COMPLETED: 3,
+    CANCELLED: 4,
+  };
+  private sortSessions<
+    T extends { status: AcademicSessionStatus; startDate: Date },
+  >(sessions: T[]): T[] {
+    return sessions.sort((a, b) => {
+      const pA = AcademicSessionsService.STATUS_PRIORITY[a.status] ?? 99;
+      const pB = AcademicSessionsService.STATUS_PRIORITY[b.status] ?? 99;
+
+      if (pA !== pB) return pA - pB;
+
+      // UPCOMING / INACTIVE → earliest first; others → most recent first
+      if (
+        a.status === AcademicSessionStatus.UPCOMING ||
+        a.status === AcademicSessionStatus.INACTIVE
+      ) {
+        return a.startDate.getTime() - b.startDate.getTime();
+      }
+      return b.startDate.getTime() - a.startDate.getTime();
     });
   }
 }

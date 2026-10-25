@@ -16,20 +16,16 @@ export class PrismaService
       throw new Error('DATABASE_URL is not defined');
     }
 
-    // pehle pool banao (this use kiye baghair)
     const pool = new Pool({
       connectionString,
-      max: 10,
+      max: 20,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
+      connectionTimeoutMillis: 15000,
     });
 
     const adapter = new PrismaPg(pool);
 
-    // ab super call karo
     super({ adapter });
-
-    // ab this use kar sakte ho   
     this.pool = pool;
   }
 

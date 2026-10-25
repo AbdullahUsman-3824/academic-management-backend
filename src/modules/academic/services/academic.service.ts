@@ -6,6 +6,11 @@ import { PrismaService } from '../../../database/prisma.service';
 import { AcademicSetupDto } from '../dto/academic-setup.dto';
 import { SetupResponse } from '../types/academic.types';
 import { AcademicSessionResponse } from '../types/academic.types';
+import {
+  AcademicYearStatus,
+  AcademicSessionStatus,
+  BatchStatus,
+} from '../../../generated/prisma/enums';
 
 @Injectable()
 export class AcademicService {
@@ -16,8 +21,20 @@ export class AcademicService {
     private readonly batchService: BatchService,
   ) {}
 
+  /**
+   * Setup is the ONLY place year, sessions and batch are created.
+   *
+   * Status assignment on create:
+   *  - Year          → inactive
+   *  - Session #1 (earliest by startDate) → upcoming
+   *  - Session #2                         → inactive
+   *  - Batch         → active  (multiple batches may be active simultaneously)
+   *
+   * If any year/session is currently active, they are marked completed
+   * before the new records are inserted.
+   */
   async setup(dto: AcademicSetupDto): Promise<SetupResponse> {
-    const { sessions, batch, year } = dto;
+    const { sessions, year } = dto;
 
     if (!sessions || sessions.length !== 2) {
       throw new BadRequestException(
@@ -34,6 +51,20 @@ export class AcademicService {
       );
     }
 
+    // ---------- Overlap check for Academic Year (DB se) ----------
+    const overlappingYear = await this.prisma.academicYear.findFirst({
+      where: {
+        AND: [{ startDate: { lt: yearEnd } }, { endDate: { gt: yearStart } }],
+      },
+    });
+
+    if (overlappingYear) {
+      throw new BadRequestException(
+        `Academic year dates overlap with existing year "${overlappingYear.name}" (${overlappingYear.startDate.toISOString().slice(0, 10)} - ${overlappingYear.endDate.toISOString().slice(0, 10)})`,
+      );
+    }
+
+    // ---------- Session validations ----------
     const parsed = sessions.map((s) => ({
       dto: s,
       start: new Date(s.startDate),
@@ -54,24 +85,59 @@ export class AcademicService {
     }
 
     const [first, second] = parsed;
-    const overlaps = first.start < second.end && second.start < first.end;
-    if (overlaps) {
+    const sessionsOverlap =
+      first.start < second.end && second.start < first.end;
+    if (sessionsOverlap) {
       throw new BadRequestException('Academic sessions must not overlap');
     }
 
     return this.prisma.$transaction(async (tx) => {
+      // Complete any active sessions before creating the new year/sessions
+      await tx.academicSession.updateMany({
+        where: { status: AcademicSessionStatus.ACTIVE },
+        data: { status: AcademicSessionStatus.COMPLETED },
+      });
+
+      // Also complete any active year
+      await tx.academicYear.updateMany({
+        where: { status: AcademicYearStatus.ACTIVE },
+        data: { status: AcademicYearStatus.COMPLETED },
+      });
+
+      // Year starts inactive
       const academicYear = await this.academicYearService.create(year, tx);
 
+      // First session (by date) → upcoming, second → inactive
       const academicSessions: AcademicSessionResponse[] = [];
-      for (const sessionDto of sessions) {
-        const created = await this.academicSessionService.create(
-          { ...sessionDto, academicYearId: academicYear.id },
-          tx,
-        );
-        academicSessions.push(created);
-      }
 
-      const createdBatch = await this.batchService.create(batch, tx);
+      const firstCreated = await this.academicSessionService.create(
+        {
+          ...first.dto,
+          academicYearId: academicYear.id,
+          status: AcademicSessionStatus.UPCOMING,
+        },
+        tx,
+      );
+      academicSessions.push(firstCreated);
+
+      const secondCreated = await this.academicSessionService.create(
+        {
+          ...second.dto,
+          academicYearId: academicYear.id,
+          status: AcademicSessionStatus.INACTIVE,
+        },
+        tx,
+      );
+      academicSessions.push(secondCreated);
+
+      // Batch always active; multiple active batches allowed
+      const createdBatch = await this.batchService.create(
+        {
+          name: academicYear.name,
+          entryYearId: academicYear.id,
+        },
+        tx,
+      );
 
       return { academicYear, academicSessions, batch: createdBatch };
     });
@@ -86,7 +152,7 @@ export class AcademicService {
     ] = await this.prisma.$transaction([
       // Current active academic year
       this.prisma.academicYear.findFirst({
-        where: { status: 'active' },
+        where: { status: AcademicYearStatus.ACTIVE },
         select: {
           id: true,
           name: true,
@@ -98,7 +164,7 @@ export class AcademicService {
 
       // Current active session (can be null)
       this.prisma.academicSession.findFirst({
-        where: { status: 'active' },
+        where: { status: AcademicSessionStatus.ACTIVE },
         select: {
           id: true,
           name: true,
@@ -113,7 +179,7 @@ export class AcademicService {
 
       // Active batches count
       this.prisma.batch.count({
-        where: { status: 'active' },
+        where: { status: BatchStatus.ACTIVE },
       }),
     ]);
 

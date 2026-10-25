@@ -3,6 +3,8 @@ import { ROLES } from '../../src/common/constants/roles';
 import { ROLE_PERMISSION_MAP } from '../../src/common/constants/role-permission-map';
 
 export async function seedRolePermissions(prisma: PrismaClient) {
+  console.log('🔗 Seeding Role Permissions...');
+
   const allPermissions = await prisma.permission.findMany();
   const allRoles = await prisma.role.findMany();
 
@@ -13,17 +15,25 @@ export async function seedRolePermissions(prisma: PrismaClient) {
 
   // Admin gets everything
   const adminRole = roleByName.get(ROLES.ADMIN);
-  if (!adminRole)
+  if (!adminRole) {
     throw new Error('ADMIN role not found — did seedRoles run first?');
+  }
 
   for (const perm of allPermissions) {
     await prisma.rolePermission.upsert({
       where: {
-        roleId_permissionId: { roleId: adminRole.id, permissionId: perm.id },
+        roleId_permissionId: {
+          roleId: adminRole.id,
+          permissionId: perm.id,
+        },
       },
       update: {},
-      create: { roleId: adminRole.id, permissionId: perm.id },
+      create: {
+        roleId: adminRole.id,
+        permissionId: perm.id,
+      },
     });
+
     count++;
   }
 
@@ -32,28 +42,39 @@ export async function seedRolePermissions(prisma: PrismaClient) {
     ROLE_PERMISSION_MAP,
   )) {
     const role = roleByName.get(roleName);
-    if (!role)
+
+    if (!role) {
       throw new Error(
         `Role "${roleName}" not found — did seedRoles run first?`,
       );
+    }
 
     for (const permName of permissionNames) {
       const perm = permissionByName.get(permName);
-      if (!perm)
+
+      if (!perm) {
         throw new Error(
           `Permission "${permName}" not found — check PERMISSIONS constant`,
         );
+      }
 
       await prisma.rolePermission.upsert({
         where: {
-          roleId_permissionId: { roleId: role.id, permissionId: perm.id },
+          roleId_permissionId: {
+            roleId: role.id,
+            permissionId: perm.id,
+          },
         },
         update: {},
-        create: { roleId: role.id, permissionId: perm.id },
+        create: {
+          roleId: role.id,
+          permissionId: perm.id,
+        },
       });
+
       count++;
     }
   }
 
-  console.log(`Seeded ${count} role-permission mappings`);
+  console.log(`   ✓ Created ${count} role-permission mappings`);
 }

@@ -7,25 +7,53 @@ import {
 import { PrismaService } from '../../../../database/prisma.service';
 import { UserService } from '../../../user/user.service';
 import { RoleService } from '../../../user/role/role.service';
+import { StudentAcademicRecordService } from '../../../academic/services/student-academic-record.service';
 import { CreateStudentDto } from '../dto/create-student.dto';
 import { UpdateStudentDto } from '../dto/update-student.dto';
 import { UpdateStudentStatusDto } from '../dto/update-student-status.dto';
 import { QueryStudentsDto } from '../dto/query-students.dto';
+import { QueryStudentMarksDto } from '../dto/query-student-marks.dto';
 import { StudentStatus } from '../enums/student-status.enum';
 import { ROLES } from '../../../../common/constants/roles';
 import type {
   StudentDetail,
   StudentListItem,
   PaginatedStudents,
+  StudentCourseOption,
+  StudentCourseDetails,
 } from '../types/student.types';
-import { Prisma } from '../../../../generated/prisma/client';
+import {
+  Prisma,
+  StudentAcademicRecordStatus,
+} from '../../../../generated/prisma/client';
 import type { CellValue } from 'exceljs';
+import ExcelJS from 'exceljs';
 
-type StudentWithRelations = Prisma.StudentGetPayload<{
-  include: {
-    batch: { select: { id: true; name: true } };
-    user: { select: { id: true; username: true } };
-  };
+const latestRecordSelect = {
+  orderBy: { academicSession: { startDate: 'desc' } },
+  take: 1,
+  select: {
+    semesterNumber: true,
+    section: { select: { name: true } },
+    academicSession: { select: { name: true } },
+  },
+} satisfies Prisma.Student$academicRecordsArgs;
+
+const listInclude = {
+  batch: { select: { id: true, name: true } },
+  academicRecords: latestRecordSelect,
+} satisfies Prisma.StudentInclude;
+
+const detailInclude = {
+  ...listInclude,
+  user: {
+    select: { id: true, username: true, status: true, lastLoginAt: true },
+  },
+} satisfies Prisma.StudentInclude;
+
+type StudentListRow = Prisma.StudentGetPayload<{ include: typeof listInclude }>;
+type StudentDetailRow = Prisma.StudentGetPayload<{
+  include: typeof detailInclude;
 }>;
 
 @Injectable()
@@ -34,88 +62,115 @@ export class StudentsService {
     private readonly prisma: PrismaService,
     private readonly userService: UserService,
     private readonly roleService: RoleService,
+    private readonly studentAcademicRecordService: StudentAcademicRecordService,
   ) {}
 
   // ── Enroll one student ────────────────────────────────────────────────────
 
-  async create(dto: CreateStudentDto): Promise<StudentDetail> {
+  async create(dto: CreateStudentDto) {
     const studentRole = await this.roleService.findByName(ROLES.STUDENT);
     const defaultPassword = process.env.DEFAULT_STUDENT_PASSWORD;
     if (!defaultPassword) {
       throw new Error('DEFAULT_STUDENT_PASSWORD must be configured');
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      // 1. Existence checks inside the transaction
-      const [batch, existingStudent, existingUser] = await Promise.all([
-        tx.batch.findUnique({ where: { id: dto.batchId } }),
-        tx.student.findFirst({
-          where: {
-            OR: [
-              { stdRegNumber: dto.stdRegNumber },
-              ...(dto.cnic ? [{ cnic: dto.cnic }] : []),
-            ],
+    return this.prisma.$transaction(
+      async (tx) => {
+        // 1. Existence checks inside the transaction
+        const [batch, existingStudent, existingUser] = await Promise.all([
+          tx.batch.findUnique({ where: { id: dto.batchId } }),
+          tx.student.findFirst({
+            where: {
+              OR: [
+                { stdRegNumber: dto.stdRegNumber },
+                ...(dto.cnic ? [{ cnic: dto.cnic }] : []),
+              ],
+            },
+          }),
+          tx.user.findUnique({ where: { username: dto.stdRegNumber } }),
+        ]);
+        if (!batch) throw new NotFoundException('Batch not found');
+        if (existingStudent?.stdRegNumber === dto.stdRegNumber)
+          throw new ConflictException(
+            'Student registration number already exists',
+          );
+        if (existingStudent?.cnic === dto.cnic)
+          throw new ConflictException('CNIC already exists');
+        if (existingUser)
+          throw new ConflictException('Username already exists');
+
+        // 2. Create user
+        const user = await this.userService.create(
+          {
+            username: dto.stdRegNumber.toLowerCase(),
+            password: defaultPassword,
+            roleId: studentRole.id,
           },
-        }),
-        tx.user.findUnique({ where: { username: dto.stdRegNumber } }),
-      ]);
-      if (!batch) throw new NotFoundException('Batch not found');
-      if (existingStudent?.stdRegNumber === dto.stdRegNumber)
-        throw new ConflictException(
-          'Student registration number already exists',
+          tx,
         );
-      if (existingStudent?.cnic === dto.cnic)
-        throw new ConflictException('CNIC already exists');
-      if (existingUser) throw new ConflictException('Username already exists');
 
-      // 2. Create user
-      const user = await this.userService.create(
-        {
-          username: dto.stdRegNumber.toLowerCase(),
-          password: defaultPassword,
-          roleId: studentRole.id,
-        },
-        tx,
-      );
+        // 3. Create student
+        const student = await tx.student.create({
+          data: {
+            userId: user.id,
+            batchId: dto.batchId,
+            stdRegNumber: dto.stdRegNumber.toUpperCase(),
+            firstName: dto.firstName,
+            middleName: dto.middleName,
+            lastName: dto.lastName,
+            email: dto.email,
+            dateOfBirth: dto.dateOfBirth
+              ? new Date(dto.dateOfBirth)
+              : undefined,
+            gender: dto.gender,
+            cnic: dto.cnic,
+            profileImageUrl: dto.profileImageUrl,
+            phone: dto.phone,
+            address: dto.address,
+            city: dto.city,
+            guardianName: dto.guardianName,
+            guardianRelation: dto.guardianRelation,
+            guardianPhone: dto.guardianPhone,
+            guardianCnic: dto.guardianCnic,
+            admissionDate: dto.admissionDate
+              ? new Date(dto.admissionDate)
+              : new Date(),
+            status: StudentStatus.ACTIVE,
+          },
+          include: {
+            batch: { select: { id: true, name: true } },
+            user: { select: { id: true, username: true } },
+          },
+        });
 
-      // 3. Create student
-      const student = await tx.student.create({
-        data: {
-          userId: user.id,
-          batchId: dto.batchId,
-          stdRegNumber: dto.stdRegNumber.toUpperCase(),
-          firstName: dto.firstName,
-          middleName: dto.middleName,
-          lastName: dto.lastName,
-          email: dto.email,
-          dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
-          gender: dto.gender,
-          cnic: dto.cnic,
-          profileImageUrl: dto.profileImageUrl,
-          phone: dto.phone,
-          address: dto.address,
-          city: dto.city,
-          guardianName: dto.guardianName,
-          guardianRelation: dto.guardianRelation,
-          guardianPhone: dto.guardianPhone,
-          guardianCnic: dto.guardianCnic,
-          admissionDate: dto.admissionDate
-            ? new Date(dto.admissionDate)
-            : new Date(),
-          status: StudentStatus.ACTIVE,
-        },
-        include: {
-          batch: { select: { id: true, name: true } },
-          user: { select: { id: true, username: true } },
-        },
-      });
-      return this.toDetail(student);
-    });
+        // 4. Create academic record for student
+        await this.studentAcademicRecordService.createRecord(
+          {
+            studentId: student.id,
+            batchId: dto.batchId,
+            academicSessionId: dto.academicSessionId,
+            semesterNumber: dto.semesterNumber,
+            sectionId: dto.sectionId,
+          },
+          tx,
+        );
+
+        return {
+          id: student.id,
+          message: 'Student enrolled successfully',
+          createdAt: student.createdAt,
+        };
+      },
+      {
+        maxWait: 10000,
+        timeout: 30000,
+      },
+    );
   }
 
   // ── List ──────────────────────────────────────────────────────────────────
 
-  async findAll(query: QueryStudentsDto): Promise<PaginatedStudents> {
+  async list(query: QueryStudentsDto): Promise<PaginatedStudents> {
     const page = query.page ?? 1;
     const limit = Math.min(Math.max(1, query.limit ?? 20), 100);
     const skip = (page - 1) * limit;
@@ -152,10 +207,7 @@ export class StudentsService {
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: {
-          batch: { select: { id: true, name: true } },
-          user: { select: { id: true, username: true } },
-        },
+        include: listInclude,
       }),
       this.prisma.student.count({ where }),
     ]);
@@ -176,10 +228,7 @@ export class StudentsService {
   async findOne(id: string): Promise<StudentDetail> {
     const student = await this.prisma.student.findUnique({
       where: { id },
-      include: {
-        batch: { select: { id: true, name: true } },
-        user: { select: { id: true, username: true } },
-      },
+      include: detailInclude,
     });
 
     if (!student) {
@@ -246,10 +295,7 @@ export class StudentsService {
             admissionDate: new Date(dto.admissionDate),
           }),
         },
-        include: {
-          batch: { select: { id: true, name: true } },
-          user: { select: { id: true, username: true } },
-        },
+        include: detailInclude,
       });
       return this.toDetail(student);
     });
@@ -306,7 +352,6 @@ export class StudentsService {
       throw new BadRequestException('File size must be less than 5 MB');
     }
 
-    const ExcelJS = await import('exceljs');
     const workbook = new ExcelJS.Workbook();
 
     // Force a plain Buffer and silence the type mismatch
@@ -589,7 +634,6 @@ export class StudentsService {
   // ── Download Template ───────────────────────────────────────────────────────
 
   async getBulkTemplate(): Promise<Buffer> {
-    const ExcelJS = await import('exceljs');
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Students');
 
@@ -680,29 +724,231 @@ export class StudentsService {
     return Buffer.from(buffer);
   }
 
-  // ── Private Helpers ───────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  STUDENT SELF-SERVICE METHODS
+  // ═══════════════════════════════════════════════════════════════════════════
 
-  private toListItem(s: StudentWithRelations): StudentListItem {
+  // GET /students/me
+  async getMe(userId: string) {
+    const student = await this.prisma.student.findUnique({
+      where: { userId },
+      select: {
+        id: true,
+        stdRegNumber: true,
+        firstName: true,
+        middleName: true,
+        lastName: true,
+        profileImageUrl: true,
+        academicRecords: {
+          orderBy: { academicSession: { startDate: 'desc' } },
+          take: 1,
+          select: {
+            semesterNumber: true,
+            section: { select: { name: true } },
+          },
+        },
+      },
+    });
+
+    if (!student) {
+      throw new NotFoundException('Student profile not found');
+    }
+
+    const record = student.academicRecords[0];
+
     return {
-      id: s.id,
-      userId: s.userId ?? s.user?.id,
-      username: s.user?.username ?? s.stdRegNumber,
-      stdRegNumber: s.stdRegNumber,
-      firstName: s.firstName,
-      middleName: s.middleName,
-      lastName: s.lastName,
-      email: s.email,
-      phone: s.phone,
-      gender: s.gender,
-      batch: s.batch ? { id: s.batch.id, name: s.batch.name } : null,
-      status: s.status,
-      admissionDate: s.admissionDate ?? new Date(),
+      id: student.id,
+      stdRegNumber: student.stdRegNumber,
+      fullName: [student.firstName, student.middleName, student.lastName]
+        .filter(Boolean)
+        .join(' '),
+      profileImageUrl: student.profileImageUrl,
+      currentSemester: record?.semesterNumber ?? null,
+      currentSection: record?.section?.name ?? null,
     };
   }
 
-  private toDetail(s: StudentWithRelations): StudentDetail {
+  // GET /students/me/dashboard
+  async getMyDashboard(userId: string) {
+    const student = await this.prisma.student.findUnique({
+      where: { userId },
+      select: {
+        id: true,
+        academicRecords: {
+          orderBy: {
+            academicSession: { startDate: 'desc' },
+          },
+          take: 1,
+          select: {
+            id: true,
+            semesterNumber: true,
+            academicSessionId: true,
+            sectionId: true,
+          },
+        },
+      },
+    });
+
+    if (!student) {
+      throw new NotFoundException('Student profile not found');
+    }
+
+    const currentRecord = student.academicRecords[0];
+
+    // Keep placeholders until their models/queries are implemented.
+    const [courses, recentAssessments, announcements] = await Promise.all([
+      currentRecord
+        ? this.getStudentCourses(currentRecord.id)
+        : Promise.resolve([]),
+      Promise.resolve([]),
+      Promise.resolve([]),
+    ]);
+
+    return {
+      studentId: student.id,
+      currentSemester: currentRecord?.semesterNumber ?? null,
+      courses,
+      recentAssessments,
+      announcements,
+      // fee: will be added later
+    };
+  }
+
+  // GET /students/me/course-options
+  async getMyCourseOptions(userId: string) {
+    const currentRecord = await this.prisma.studentAcademicRecord.findFirst({
+      where: {
+        student: {
+          userId,
+        },
+        status: StudentAcademicRecordStatus.ENROLLED,
+      },
+      orderBy: {
+        academicSession: {
+          startDate: 'desc',
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!currentRecord) {
+      throw new NotFoundException('No active academic record found');
+    }
+
+    return this.getStudentCourseOptions(currentRecord.id);
+  }
+
+  // GET /students/me/marks
+  async getMyMarks(userId: string, query: QueryStudentMarksDto) {
+    const student = await this.prisma.student.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+
+    if (!student) {
+      throw new NotFoundException('Student profile not found');
+    }
+
+    const where: Prisma.StudentMarkWhereInput = {
+      studentId: student.id,
+      ...(query.courseId || query.category
+        ? {
+            assessment: {
+              ...(query.courseId
+                ? {
+                    courseAllocation: {
+                      courseId: query.courseId,
+                    },
+                  }
+                : {}),
+              ...(query.category
+                ? {
+                    assessmentCategory: {
+                      name: query.category,
+                    },
+                  }
+                : {}),
+            },
+          }
+        : {}),
+    };
+
+    const marks = await this.prisma.studentMark.findMany({
+      where,
+      include: {
+        assessment: {
+          include: {
+            courseAllocation: {
+              include: {
+                course: {
+                  select: {
+                    code: true,
+                    name: true,
+                  },
+                },
+              },
+            },
+            assessmentCategory: true,
+          },
+        },
+      },
+    });
+
+    return marks.map((mark) => ({
+      id: mark.id,
+      assessment: mark.assessment.title,
+      marks: {
+        total: mark.assessment.totalMarks.toNumber(),
+        obtained: mark.marksObtained.toNumber(),
+      },
+      course: {
+        code: mark.assessment.courseAllocation.course.code,
+        name: mark.assessment.courseAllocation.course.name,
+      },
+    }));
+  }
+
+  // GET /students/me/profile
+  async getMyProfile(userId: string): Promise<StudentDetail> {
+    const student = await this.prisma.student.findUnique({
+      where: { userId },
+      include: detailInclude,
+    });
+
+    if (!student) {
+      throw new NotFoundException('Student profile not found');
+    }
+
+    return this.toDetail(student);
+  }
+
+  // ── Private Helpers ───────────────────────────────────────
+
+  private toListItem(s: StudentListRow): StudentListItem {
+    const record = s.academicRecords[0];
+
+    return {
+      id: s.id,
+      stdRegNumber: s.stdRegNumber,
+      fullName: [s.firstName, s.middleName, s.lastName]
+        .filter(Boolean)
+        .join(' '),
+      email: s.email,
+      phone: s.phone,
+      batchName: s.batch?.name ?? null,
+      currentSemester: record?.semesterNumber ?? null,
+      currentSection: record?.section.name ?? null,
+      status: s.status as StudentStatus,
+      admissionDate: s.admissionDate,
+    };
+  }
+
+  private toDetail(s: StudentDetailRow): StudentDetail {
     return {
       ...this.toListItem(s),
+      gender: s.gender,
       dateOfBirth: s.dateOfBirth,
       cnic: s.cnic,
       profileImageUrl: s.profileImageUrl,
@@ -712,6 +958,11 @@ export class StudentsService {
       guardianRelation: s.guardianRelation,
       guardianPhone: s.guardianPhone,
       guardianCnic: s.guardianCnic,
+      username: s.user.username,
+      accountStatus: s.user.status,
+      lastLoginAt: s.user.lastLoginAt,
+      currentAcademicSession:
+        s.academicRecords[0]?.academicSession.name ?? null,
       createdAt: s.createdAt,
       updatedAt: s.updatedAt,
     };
@@ -723,5 +974,93 @@ export class StudentsService {
       select: { id: true },
     });
     if (!exists) throw new NotFoundException('Student not found');
+  }
+
+  private async getStudentCourses(
+    studentAcademicRecordId: string,
+  ): Promise<StudentCourseDetails[]> {
+    const enrollments = await this.prisma.courseEnrollment.findMany({
+      where: {
+        studentAcademicRecordId,
+        status: 'enrolled',
+      },
+      select: {
+        course: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            creditHours: true,
+          },
+        },
+        allocation: {
+          select: {
+            faculty: {
+              select: {
+                firstName: true,
+                middleName: true,
+                lastName: true,
+                designation: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        enrolledAt: 'desc',
+      },
+    });
+
+    return enrollments.map(({ course, allocation }) => {
+      const faculty = allocation?.faculty;
+
+      const facultyName = faculty
+        ? [
+            faculty.designation,
+            faculty.firstName,
+            faculty.middleName,
+            faculty.lastName,
+          ]
+            .filter((part): part is string => Boolean(part))
+            .join(' ')
+        : null;
+
+      return {
+        id: course.id,
+        code: course.code,
+        name: course.name,
+        creditHours: course.creditHours,
+        facultyName,
+      };
+    });
+  }
+
+  private async getStudentCourseOptions(
+    studentAcademicRecordId: string,
+  ): Promise<StudentCourseOption[]> {
+    const enrollments = await this.prisma.courseEnrollment.findMany({
+      where: {
+        studentAcademicRecordId,
+        status: 'enrolled',
+      },
+      select: {
+        course: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        enrolledAt: 'desc',
+      },
+    });
+
+    return enrollments.map(({ course }) => ({
+      id: course.id,
+      code: course.code,
+      name: course.name,
+    }));
   }
 }

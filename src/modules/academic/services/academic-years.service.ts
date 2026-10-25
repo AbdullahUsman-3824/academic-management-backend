@@ -1,10 +1,17 @@
 import { PrismaService } from '../../../database/prisma.service';
 import { ConflictException } from '@nestjs/common/exceptions/conflict.exception';
-import { CreateAcademicYearDto } from '../dto/create-academic-year.dto';
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { UpdateAcademicYearDto } from '../dto/update-academic-year.dto';
+
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { AcademicYearResponse } from '../types/academic.types';
-import { AcademicYearStatus } from '../enums/academic-status.enum';
+import {
+  CreateAcademicYearDto,
+  UpdateAcademicYearDto,
+} from '../dto/academic-year.dto';
+import { AcademicYearStatus } from '../../../generated/prisma/client';
 import { Prisma } from '../../../generated/prisma/client';
 
 type TxClient = Prisma.TransactionClient;
@@ -19,17 +26,12 @@ export class AcademicYearsService {
   ): Promise<AcademicYearResponse> {
     const run = async (client: TxClient | PrismaService) => {
       try {
-        await client.academicYear.updateMany({
-          where: { status: 'active' },
-          data: { status: 'completed' },
-        });
-
         return await client.academicYear.create({
           data: {
             name: data.name,
             startDate: new Date(data.startDate),
             endDate: new Date(data.endDate),
-            status: 'active',
+            status: AcademicYearStatus.INACTIVE,
           },
         });
       } catch (err) {
@@ -49,15 +51,24 @@ export class AcademicYearsService {
     // don't nest another $transaction. Otherwise wrap standalone calls atomically.
     const academicYear = tx
       ? await run(tx)
-      : await this.prisma.$transaction((trx) => run(trx));
+      : await this.prisma.$transaction(async (trx) => run(trx), {
+          maxWait: 10000, // 10 seconds max wait to acquire connection
+          timeout: 20000, // 20 seconds transaction timeout
+        });
 
     return {
       ...academicYear,
-      status: academicYear.status as AcademicYearStatus,
+      status: academicYear.status,
     };
   }
 
   async findAll(status?: AcademicYearStatus) {
+    if (status && !Object.values(AcademicYearStatus).includes(status)) {
+      throw new BadRequestException(
+        `Invalid status "${status}". Allowed values: ${Object.values(AcademicYearStatus).join(', ')}`,
+      );
+    }
+
     return this.prisma.academicYear.findMany({
       where: {
         ...(status && { status }),
@@ -88,7 +99,24 @@ export class AcademicYearsService {
   }
 
   async update(id: string, dto: UpdateAcademicYearDto) {
-    await this.findOne(id);
+    const year = await this.findOne(id);
+
+    const isActive = year.status === AcademicYearStatus.ACTIVE;
+    const isCompleted = year.status === AcademicYearStatus.COMPLETED;
+
+    if (isCompleted) {
+      throw new BadRequestException('Cannot edit a completed academic year');
+    }
+
+    // Once active, dates cannot be changed
+    if (
+      isActive &&
+      (dto.startDate !== undefined || dto.endDate !== undefined)
+    ) {
+      throw new BadRequestException(
+        'Cannot change dates of an active academic year. Only name can be updated.',
+      );
+    }
 
     const data: Prisma.AcademicYearUpdateInput = {
       ...(dto.name !== undefined && { name: dto.name }),
@@ -98,7 +126,7 @@ export class AcademicYearsService {
       ...(dto.endDate !== undefined && { endDate: new Date(dto.endDate) }),
     };
 
-    return this.prisma.academicYear.update({
+    const updated = await this.prisma.academicYear.update({
       where: { id },
       data,
       include: {
@@ -107,6 +135,7 @@ export class AcademicYearsService {
         },
       },
     });
+    return updated;
   }
 
   async remove(id: string) {
