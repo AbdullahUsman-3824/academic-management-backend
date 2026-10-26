@@ -22,9 +22,9 @@ import { UpdateStudentDto } from '../dto/update-student.dto';
 import { UpdateStudentStatusDto } from '../dto/update-student-status.dto';
 import { QueryStudentsDto } from '../dto/query-students.dto';
 import { QueryStudentMarksDto } from '../dto/query-student-marks.dto';
-import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
-import type { SafeUser } from '@/common/types/user';
-import { CurrentUser } from '@/common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
+import type { SafeUser } from '../../../../common/types/user';
+import { CurrentUser } from '../../../../common/decorators/current-user.decorator';
 
 @Controller('students')
 @UseGuards(JwtAuthGuard)

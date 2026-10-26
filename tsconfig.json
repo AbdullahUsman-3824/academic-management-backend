@@ -21,8 +21,5 @@
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false,
     "types": ["jest", "node"],
-    "paths": {
-      "@/*": ["./src/*"]
-    }
   }
 }
