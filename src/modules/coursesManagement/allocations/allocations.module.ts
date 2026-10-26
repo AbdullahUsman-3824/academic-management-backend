@@ -1,4 +1,4 @@
-import { DatabaseModule } from '@/database/database.module';
+import { DatabaseModule } from '../../../database/database.module';
 import { Module } from '@nestjs/common';
 import { AllocationsController } from './controller/allocations.controller';
 import { AllocationsService } from './service/allocations.service';
