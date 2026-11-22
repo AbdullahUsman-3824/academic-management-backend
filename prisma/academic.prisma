@@ -31,108 +31,100 @@ enum StudentAcademicRecordStatus {
 }
 
 model AcademicYear {
-  id           String               @id @default(uuid()) @db.Uuid
-  name         String               @unique
-  startDate    DateTime             @map("start_date") @db.Date
-  endDate      DateTime             @map("end_date") @db.Date
-  status       AcademicYearStatus   @default(ACTIVE)
-  
-  academicSessions AcademicSession[]  @relation("AcademicYearSessions")
-  batches      Batch[]
-  
+  id        String             @id @default(uuid()) @db.Uuid
+  name      String             @unique
+  startDate DateTime           @map("start_date") @db.Date
+  endDate   DateTime           @map("end_date") @db.Date
+  status    AcademicYearStatus @default(ACTIVE)
+
+  academicSessions AcademicSession[] @relation("AcademicYearSessions")
+  batches          Batch[]
+
   @@map("academic_years")
 }
 
 model AcademicSession {
-  id              String                  @id @default(uuid()) @db.Uuid
-  academicYearId  String                  @map("academic_year_id") @db.Uuid
-  name            String
-  startDate       DateTime                @map("start_date") @db.Date
-  endDate         DateTime                @map("end_date") @db.Date
-  status          AcademicSessionStatus   @default(UPCOMING)
-  progressed      Boolean                 @default(false)
-  
+  id             String                @id @default(uuid()) @db.Uuid
+  academicYearId String                @map("academic_year_id") @db.Uuid
+  name           String
+  startDate      DateTime              @map("start_date") @db.Date
+  endDate        DateTime              @map("end_date") @db.Date
+  status         AcademicSessionStatus @default(UPCOMING)
+  progressed     Boolean               @default(false)
+
   academicYear    AcademicYear            @relation("AcademicYearSessions", fields: [academicYearId], references: [id])
   allocations     CourseAllocation[]
   academicRecords StudentAcademicRecord[]
-  courseResults   StudentCourseResult[]
-  
+
   @@map("academic_sessions")
 }
 
 model Batch {
-  id                   String                  @id @default(uuid()) @db.Uuid
-  name                 String                  @unique
-  entryYearId          String                  @map("entry_year_id") @db.Uuid
-  programDuration      Int                     @default(4) @map("program_duration")
-  sectionCapacity      Int?                    @map("section_capacity")
-  status               BatchStatus             @default(ACTIVE)
-  createdAt            DateTime                @default(now()) @map("created_at")
-  updatedAt            DateTime?               @updatedAt @map("updated_at")
-  
-  entryYear            AcademicYear            @relation(fields: [entryYearId], references: [id])
-  students             Student[]
-  sections             Section[]
-  courseAssignments    BatchCourseAssignment[]
-  academicRecords      StudentAcademicRecord[]
-  
+  id              String      @id @default(uuid()) @db.Uuid
+  name            String      @unique
+  entryYearId     String      @map("entry_year_id") @db.Uuid
+  programDuration Int         @default(4) @map("program_duration")
+  sectionCapacity Int?        @map("section_capacity")
+  status          BatchStatus @default(ACTIVE)
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime?   @updatedAt @map("updated_at")
+
+  entryYear         AcademicYear            @relation(fields: [entryYearId], references: [id])
+  students          Student[]
+  sections          Section[]
+  courseAssignments BatchCourseAssignment[]
+
   @@index([entryYearId])
   @@map("batches")
 }
 
 model Section {
-  id               String                  @id @default(uuid()) @db.Uuid
-  batchId          String                  @map("batch_id") @db.Uuid
-  name             String
-  isDefault        Boolean                 @default(false) @map("is_default")
-  createdAt        DateTime                @default(now()) @map("created_at")
-  updatedAt        DateTime?               @updatedAt @map("updated_at")
-  
-  batch            Batch                   @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  allocations      CourseAllocation[]
-  academicRecords  StudentAcademicRecord[]
-  
+  id        String    @id @default(uuid()) @db.Uuid
+  batchId   String    @map("batch_id") @db.Uuid
+  name      String
+  isDefault Boolean   @default(false) @map("is_default")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime? @updatedAt @map("updated_at")
+
+  batch           Batch                   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  allocations     CourseAllocation[]
+  academicRecords StudentAcademicRecord[]
+
   @@unique([batchId, name])
   @@map("sections")
 }
 
 model Semester {
-  id               String                  @id @default(uuid()) @db.Uuid
-  number           Int                     @unique
-  name             String
-  displayName      String                  @map("display_name")
-  minCredits       Int                     @default(12) @map("min_credits")
-  maxCredits       Int                     @default(21) @map("max_credits")
-  isActive         Boolean                 @default(true) @map("is_active")
-  createdAt        DateTime                @default(now()) @map("created_at")
-  updatedAt        DateTime?               @updatedAt @map("updated_at")
-  
-  semesterCourses  SemesterCourse[]
-  academicRecords  StudentAcademicRecord[]
-  
+  id         String    @id @default(uuid()) @db.Uuid
+  number     Int       @unique
+  minCredits Int       @default(12) @map("min_credits")
+  maxCredits Int       @default(21) @map("max_credits")
+  isActive   Boolean   @default(true) @map("is_active")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime? @updatedAt @map("updated_at")
+
+  batchCourseAssignments BatchCourseAssignment[]
+  academicRecords        StudentAcademicRecord[]
+
   @@map("semesters")
 }
 
 model StudentAcademicRecord {
-  id                String                       @id @default(uuid()) @db.Uuid
-  studentId         String                       @map("student_id") @db.Uuid
-  academicSessionId String                       @map("academic_session_id") @db.Uuid
-  batchId           String                       @map("batch_id") @db.Uuid
-  sectionId         String                       @map("section_id") @db.Uuid
-  semesterId        String                       @map("semester_id") @db.Uuid
-  semesterNumber    Int                          @map("semester_number")
-  status            StudentAcademicRecordStatus  @default(ENROLLED)
-  createdAt         DateTime                     @default(now()) @map("created_at")
-  updatedAt         DateTime?                    @map("updated_at")
-  
-  student           Student                      @relation(fields: [studentId], references: [id])
-  academicSession   AcademicSession              @relation(fields: [academicSessionId], references: [id])
-  batch             Batch                        @relation(fields: [batchId], references: [id])
-  section           Section                      @relation(fields: [sectionId], references: [id])
-  semester          Semester                     @relation(fields: [semesterId], references: [id])
+  id                String                      @id @default(uuid()) @db.Uuid
+  studentId         String                      @map("student_id") @db.Uuid
+  academicSessionId String                      @map("academic_session_id") @db.Uuid
+  sectionId         String                      @map("section_id") @db.Uuid
+  semesterId        String                      @map("semester_id") @db.Uuid
+  status            StudentAcademicRecordStatus @default(ENROLLED)
+  createdAt         DateTime                    @default(now()) @map("created_at")
+  updatedAt         DateTime?                   @updatedAt @map("updated_at")
+
+  student           Student            @relation(fields: [studentId], references: [id])
+  academicSession   AcademicSession    @relation(fields: [academicSessionId], references: [id])
+  section           Section            @relation(fields: [sectionId], references: [id])
+  semester          Semester           @relation(fields: [semesterId], references: [id])
   courseEnrollments CourseEnrollment[]
-  
+
   @@unique([studentId, academicSessionId])
-  @@index([batchId, sectionId])
   @@map("student_academic_records")
 }
