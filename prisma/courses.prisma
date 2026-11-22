@@ -1,110 +1,139 @@
-// =====================================================
-// MODULE 4: COURSE MANAGEMENT
-// =====================================================
+// Course Management Models
 
 model Course {
-  id          String    @id @default(uuid()) @db.Uuid
-  code        String    @unique
-  name        String
-  description String?
-  creditHours Int       @map("credit_hours")
-  status      String    @default("active") // active | inactive
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime? @updatedAt @map("updated_at")
-
-  courseEnrollments       CourseEnrollment[]
-  courseAllocations       CourseAllocation[]
-  courseResults           StudentCourseResult[]
-  semesterCourses         SemesterCourse[]
-  batchCourseAssignments  BatchCourseAssignment[]
-
+  id                   String                    @id @default(uuid()) @db.Uuid
+  code                 String                    @unique
+  name                 String
+  description          String?
+  creditHours          Int                       @map("credit_hours")
+  status               String                    @default("active")
+  createdAt            DateTime                  @default(now()) @map("created_at")
+  updatedAt            DateTime?                 @map("updated_at")
+  
+  allocations          CourseAllocation[]
+  enrollments          CourseEnrollment[]
+  semesterCourses      SemesterCourse[]
+  batchAssignments     BatchCourseAssignment[]
+  courseResults        StudentCourseResult[]
+  
   @@map("courses")
 }
 
+model SemesterCourse {
+  id            String    @id @default(uuid()) @db.Uuid
+  semesterId    String    @map("semester_id") @db.Uuid
+  courseId      String    @map("course_id") @db.Uuid
+  isCompulsory  Boolean   @default(true) @map("is_compulsory")
+  displayOrder  Int       @default(0) @map("display_order")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime? @map("updated_at")
+  
+  semester      Semester  @relation(fields: [semesterId], references: [id])
+  course        Course    @relation(fields: [courseId], references: [id])
+  
+  @@unique([semesterId, courseId])
+  @@map("semester_courses")
+}
+
+model BatchCourseAssignment {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  batchId         String    @map("batch_id") @db.Uuid
+  courseId        String    @map("course_id") @db.Uuid
+  semesterNumber  Int       @map("semester_number")
+  isCompulsory    Boolean   @default(true) @map("is_compulsory")
+  displayOrder    Int       @default(0) @map("display_order")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt       DateTime? @map("updated_at") @db.Timestamp(6)
+  
+  batch           Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  course          Course    @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  
+  @@unique([batchId, semesterNumber, courseId])
+  @@index([batchId, semesterNumber], map: "idx_batch_semester")
+  @@map("batch_course_assignments")
+}
+
+model CourseAllocation {
+  id                String             @id @default(uuid()) @db.Uuid
+  courseId          String             @map("course_id") @db.Uuid
+  facultyId         String             @map("faculty_id") @db.Uuid
+  sectionId         String             @map("section_id") @db.Uuid
+  academicSessionId String             @map("academic_session_id") @db.Uuid
+  semesterNumber    Int                @map("semester_number")
+  status            String             @default("active")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime?          @map("updated_at")
+  
+  course            Course             @relation(fields: [courseId], references: [id])
+  faculty           Faculty            @relation(fields: [facultyId], references: [id])
+  section           Section            @relation(fields: [sectionId], references: [id])
+  academicSession   AcademicSession    @relation(fields: [academicSessionId], references: [id])
+  enrollments       CourseEnrollment[]
+  assessments       Assessment[]
+  
+  @@unique([courseId, facultyId, sectionId, academicSessionId])
+  @@index([facultyId, academicSessionId, status])
+  @@index([sectionId, semesterNumber], map: "idx_section_semester_number")
+  @@map("course_allocations")
+}
+
 model CourseEnrollment {
-  id                      String    @id @default(uuid()) @db.Uuid
-  studentAcademicRecordId String    @map("student_academic_record_id") @db.Uuid
-  courseId                String    @map("course_id") @db.Uuid
-  allocationId            String?   @map("allocation_id") @db.Uuid // Links to specific teacher/section for extra courses
-  status                  String    @default("enrolled") // enrolled | dropped | completed | failed | reappear
-  isExtra                 Boolean   @default(false) @map("is_extra") // true when Admin adds extra or reappear subject
-  enrolledAt              DateTime  @default(now()) @map("enrolled_at")
-  droppedAt               DateTime? @map("dropped_at")
-  createdAt               DateTime  @default(now()) @map("created_at")
-  updatedAt               DateTime? @updatedAt @map("updated_at")
-
-  studentAcademicRecord StudentAcademicRecord @relation(fields: [studentAcademicRecordId], references: [id])
-  course                Course                @relation(fields: [courseId], references: [id])
-  allocation            CourseAllocation?     @relation(fields: [allocationId], references: [id])
-  courseResults         StudentCourseResult[]
-
+  id                      String                  @id @default(uuid()) @db.Uuid
+  studentAcademicRecordId String                  @map("student_academic_record_id") @db.Uuid
+  courseId                String                  @map("course_id") @db.Uuid
+  allocationId            String?                 @map("allocation_id") @db.Uuid
+  status                  String                  @default("enrolled")
+  isExtra                 Boolean                 @default(false) @map("is_extra")
+  enrolledAt              DateTime                @default(now()) @map("enrolled_at")
+  droppedAt               DateTime?               @map("dropped_at")
+  createdAt               DateTime                @default(now()) @map("created_at")
+  updatedAt               DateTime?               @map("updated_at")
+  
+  studentAcademicRecord   StudentAcademicRecord   @relation(fields: [studentAcademicRecordId], references: [id])
+  course                  Course                  @relation(fields: [courseId], references: [id])
+  allocation              CourseAllocation?       @relation(fields: [allocationId], references: [id])
+  courseResults           StudentCourseResult[]
+  
   @@unique([studentAcademicRecordId, courseId])
   @@index([allocationId])
   @@map("course_enrollments")
 }
 
-model CourseAllocation {
-  id                String    @id @default(uuid()) @db.Uuid
-  courseId          String    @map("course_id") @db.Uuid
-  facultyId         String    @map("faculty_id") @db.Uuid
-  sectionId         String    @map("section_id") @db.Uuid
-  semesterNumber    Int       @map("semester_number") // 1-10, replaces semesterId
-  academicSessionId String    @map("academic_session_id") @db.Uuid
-  status            String    @default("active") // active | inactive
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime? @updatedAt @map("updated_at")
-
-  course            Course             @relation(fields: [courseId], references: [id])
-  faculty           Faculty            @relation(fields: [facultyId], references: [id])
-  section           Section            @relation(fields: [sectionId], references: [id])
-  academicSession   AcademicSession    @relation(fields: [academicSessionId], references: [id])
-  assessments       Assessment[]
-  courseEnrollments CourseEnrollment[] // Extra course enrollments linked to this allocation
-
-  // One teacher per course per section per session
-  @@unique([courseId, facultyId, sectionId, academicSessionId])
-  @@index([facultyId, academicSessionId, status])
-  @@index([sectionId, semesterNumber])
-  @@map("course_allocations")
+model StudentCourseResult {
+  id                   String            @id @default(uuid()) @db.Uuid
+  studentId            String            @map("student_id") @db.Uuid
+  courseEnrollmentId   String            @map("course_enrollment_id") @db.Uuid
+  courseId             String            @map("course_id") @db.Uuid
+  academicSessionId    String            @map("academic_session_id") @db.Uuid
+  totalPercentage      Decimal           @map("total_percentage") @db.Decimal(5, 2)
+  grade                String?
+  gradePoint           Decimal?          @map("grade_point") @db.Decimal(3, 2)
+  creditHours          Int               @map("credit_hours")
+  status               String            @default("draft")
+  isReappear           Boolean           @default(false) @map("is_reappear")
+  calculatedAt         DateTime?         @map("calculated_at")
+  finalizedAt          DateTime?         @map("finalized_at")
+  finalizedBy          String?           @map("finalized_by") @db.Uuid
+  createdAt            DateTime          @default(now()) @map("created_at")
+  updatedAt            DateTime?         @map("updated_at")
+  
+  student              Student           @relation(fields: [studentId], references: [id])
+  courseEnrollment     CourseEnrollment  @relation(fields: [courseEnrollmentId], references: [id])
+  course               Course            @relation(fields: [courseId], references: [id])
+  academicSession      AcademicSession   @relation(fields: [academicSessionId], references: [id])
+  finalizedByUser      User?             @relation(fields: [finalizedBy], references: [id])
+  
+  @@unique([studentId, courseEnrollmentId])
+  @@map("student_course_results")
 }
 
-model SemesterCourse {
-  id             String    @id @default(uuid()) @db.Uuid
-  semesterId     String    @map("semester_id") @db.Uuid
-  semesterNumber Int       @map("semester_number") // DEPRECATED: Keep for backward compatibility
-  courseId       String    @map("course_id") @db.Uuid
-  isCompulsory   Boolean   @default(true) @map("is_compulsory")
-  displayOrder   Int       @default(0) @map("display_order")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime? @updatedAt @map("updated_at")
-
-  semester Semester @relation(fields: [semesterId], references: [id])
-  course   Course   @relation(fields: [courseId], references: [id])
-
-  @@unique([semesterId, courseId])
-  @@map("semester_courses")
-}
-
-// =====================================================
-// BATCH-BASED COURSE ASSIGNMENTS (NEW!)
-// =====================================================
-
-model BatchCourseAssignment {
-  id             String    @id @default(uuid()) @db.Uuid
-  batchId        String    @map("batch_id") @db.Uuid
-  sectionId      String?   @map("section_id") @db.Uuid // Optional: assign to specific section
-  courseId       String    @map("course_id") @db.Uuid
-  semesterNumber Int       @map("semester_number") // 1-10: Which semester level
-  isCompulsory   Boolean   @default(true) @map("is_compulsory")
-  displayOrder   Int       @default(0) @map("display_order")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime? @updatedAt @map("updated_at")
-
-  batch   Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  section Section? @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  course  Course   @relation(fields: [courseId], references: [id])
-
-  @@unique([batchId, sectionId, courseId, semesterNumber])
-  @@index([batchId, semesterNumber])
-  @@map("batch_course_assignments")
+model GradeScale {
+  id             String  @id @default(uuid()) @db.Uuid
+  gradeLetter    String  @map("grade_letter")
+  minPercentage  Decimal @map("min_percentage") @db.Decimal(5, 2)
+  maxPercentage  Decimal @map("max_percentage") @db.Decimal(5, 2)
+  gradePoint     Decimal @map("grade_point") @db.Decimal(3, 2)
+  displayOrder   Int     @default(0) @map("display_order")
+  
+  @@map("grade_scales")
 }

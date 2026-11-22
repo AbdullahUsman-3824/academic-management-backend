@@ -1,12 +1,13 @@
 import {
   Injectable,
+  Logger,
   BadRequestException,
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
 import { SectionService } from './section.service';
-import { EnrollmentsService } from '../../coursesManagement/enrollments/service/enrollments.service';
+import { EnrollmentsService } from '../../coursesManagement/enrollments/services/enrollments.service';
 import { Prisma } from '../../../generated/prisma/client';
 
 type Db = PrismaService | Prisma.TransactionClient;
@@ -21,6 +22,8 @@ export interface CreateStudentAcademicRecordDto {
 
 @Injectable()
 export class StudentAcademicRecordService {
+  private readonly logger = new Logger(StudentAcademicRecordService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly sectionService: SectionService,
@@ -113,7 +116,7 @@ export class StudentAcademicRecordService {
       // Resolve semester ID from semester number
       const semester = await client.semester.findUnique({
         where: { number: semesterNumber },
-        select: { id: true },
+        select: { id: true, number: true },
       });
 
       if (!semester) {
@@ -127,8 +130,10 @@ export class StudentAcademicRecordService {
           studentId,
           batchId,
           academicSessionId,
-          semesterNumber,
-          semesterId: semester.id, // ADD: Required field
+          // Single source of truth: derive from the Semester row, never the
+          // raw input, so the two columns can't drift (#1).
+          semesterNumber: semester.number,
+          semesterId: semester.id,
           sectionId: suggested.id,
           status: 'ENROLLED',
         },
@@ -159,7 +164,7 @@ export class StudentAcademicRecordService {
       };
 
       try {
-        console.log(
+        this.logger.log(
           `[AUTO-ENROLL] Starting for student ${studentId}, batch ${batchId}, semester ${semesterNumber}`,
         );
         enrollmentResult = await this.enrollmentsService.autoEnrollInBatchCourses(
@@ -168,11 +173,11 @@ export class StudentAcademicRecordService {
           semesterNumber,
           client,
         );
-        console.log(
+        this.logger.log(
           `[AUTO-ENROLL] Complete: ${enrollmentResult.created.length} courses enrolled, ${enrollmentResult.skipped} skipped, ${enrollmentResult.errors.length} errors`,
         );
       } catch (enrollError: any) {
-        console.error('[AUTO-ENROLL] Failed:', enrollError.message);
+        this.logger.error('[AUTO-ENROLL] Failed:', enrollError.message);
         // Don't fail the student creation if enrollment fails
         enrollmentResult.errors.push({
           courseId: 'SYSTEM',

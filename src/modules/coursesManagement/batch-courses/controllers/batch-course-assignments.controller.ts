@@ -8,7 +8,7 @@ import {
   Param,
   Query,
 } from '@nestjs/common';
-import { BatchCourseAssignmentsService } from '../service/batch-course-assignments.service';
+import { BatchCourseAssignmentsService } from '../services/batch-course-assignments.service';
 import {
   CreateBatchCourseAssignmentDto,
   BulkAssignCoursesDto,
@@ -46,7 +46,7 @@ export class BatchCourseAssignmentsController {
   /**
    * GET /batch-course-assignments
    * Get courses assigned to a batch/semester
-   * Query params: batchId, semesterNumber?, sectionId?
+   * Query params: batchId, semesterNumber?
    */
   @Get()
   async findAll(
@@ -91,49 +91,12 @@ export class BatchCourseAssignmentsController {
   /**
    * DELETE /batch-course-assignments
    * Remove all courses from a batch/semester
-   * Query params: batchId, semesterNumber?, sectionId?
+   * Query params: batchId, semesterNumber?
    */
   @Delete()
   async removeAll(
     @Query() query: GetBatchCoursesQueryDto,
   ): Promise<{ count: number }> {
     return this.service.removeAll(query);
-  }
-
-  /**
-   * GET /batch-course-assignments/preview-template/:batchId
-   * Preview what courses will be copied from semester_courses template
-   * Query params: semesterNumber, sectionId?
-   */
-  @Get('preview-template/:batchId')
-  async previewTemplateCopy(
-    @Param('batchId') batchId: string,
-    @Query('semesterNumber') semesterNumber: string,
-    @Query('sectionId') sectionId?: string,
-  ) {
-    return this.service.previewTemplateCopy(
-      batchId,
-      parseInt(semesterNumber, 10),
-      sectionId,
-    );
-  }
-
-  /**
-   * POST /batch-course-assignments/copy-from-template
-   * Copy courses from semester_courses template to a batch for a specific semester
-   */
-  @Post('copy-from-template')
-  async copyFromTemplate(
-    @Body() dto: { batchId: string; semesterNumber: number; sectionId?: string },
-  ): Promise<{ count: number; message: string }> {
-    const result = await this.service.copyFromTemplate(
-      dto.batchId,
-      dto.semesterNumber,
-      dto.sectionId,
-    );
-    return {
-      ...result,
-      message: `Successfully copied ${result.count} courses from template for Semester ${dto.semesterNumber}`,
-    };
   }
 }

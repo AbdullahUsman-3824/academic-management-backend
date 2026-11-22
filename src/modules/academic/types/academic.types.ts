@@ -29,7 +29,7 @@ export interface BatchEntity {
   sectionCapacity: number | null;
   status: BatchStatus;
   createdAt: Date;
-  updatedAt: Date;
+  updatedAt: Date | null;
 }
 
 export interface MappedBatchResponse {

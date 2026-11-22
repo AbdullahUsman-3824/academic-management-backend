@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ConflictException,
   BadRequestException,
@@ -11,20 +12,39 @@ import {
   BulkAllocationDto,
   GetAllocationsQueryDto,
 } from '../dto';
+import {
+  ACADEMIC_SESSION_STATUS,
+  ALLOCATION_STATUS,
+  ENROLLMENT_STATUS,
+} from '../../../../common/constants/status.constants';
+
+/**
+ * #9 Workload guard: max ACTIVE course allocations one faculty may hold in a
+ * single academic session. Configurable via env; defaults to 8. This is a
+ * load cap, not a timetable clash check — true time-slot conflict detection
+ * needs schedule data the model doesn't yet carry.
+ */
+const MAX_ALLOCATIONS_PER_FACULTY_PER_SESSION = Number(
+  process.env.MAX_ALLOCATIONS_PER_FACULTY_PER_SESSION ?? 8,
+);
 
 @Injectable()
 export class AllocationsService {
+  private readonly logger = new Logger(AllocationsService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   /**
    * Create a single course allocation
    */
-  async create(dto: CreateAllocationDto) {
+  async create(dto: CreateAllocationDto, tx?: any) {
+    const db = tx ?? this.prisma;
+
     // Validate all foreign keys
     const [course, faculty, section] = await Promise.all([
-      this.prisma.course.findUnique({ where: { id: dto.courseId } }),
-      this.prisma.faculty.findUnique({ where: { id: dto.facultyId } }),
-      this.prisma.section.findUnique({
+      db.course.findUnique({ where: { id: dto.courseId } }),
+      db.faculty.findUnique({ where: { id: dto.facultyId } }),
+      db.section.findUnique({
         where: { id: dto.sectionId },
         include: { batch: true },
       }),
@@ -35,8 +55,8 @@ export class AllocationsService {
     if (!section) throw new NotFoundException('Section not found');
 
     // Always use the active academic session
-    const activeSession = await this.prisma.academicSession.findFirst({
-      where: { status: 'ACTIVE' },
+    const activeSession = await db.academicSession.findFirst({
+      where: { status: ACADEMIC_SESSION_STATUS.ACTIVE },
       orderBy: { startDate: 'desc' },
     });
     if (!activeSession) {
@@ -46,8 +66,22 @@ export class AllocationsService {
     }
     const academicSessionId = activeSession.id;
 
+    // #9 Workload guard: cap active allocations per faculty per session.
+    const activeLoad = await db.courseAllocation.count({
+      where: {
+        facultyId: dto.facultyId,
+        academicSessionId,
+        status: ALLOCATION_STATUS.ACTIVE,
+      },
+    });
+    if (activeLoad >= MAX_ALLOCATIONS_PER_FACULTY_PER_SESSION) {
+      throw new BadRequestException(
+        `${faculty.firstName} ${faculty.lastName} already holds the maximum of ${MAX_ALLOCATIONS_PER_FACULTY_PER_SESSION} active course allocations for this session.`,
+      );
+    }
+
     // Auto-detect semester from section's current academic records
-    const sectionRecord = await this.prisma.studentAcademicRecord.findFirst({
+    const sectionRecord = await db.studentAcademicRecord.findFirst({
       where: {
         sectionId: dto.sectionId,
         academicSessionId: activeSession.id,
@@ -66,15 +100,11 @@ export class AllocationsService {
 
     // Validate course is assigned to this batch/semester
     const batchCourseAssignment =
-      await this.prisma.batchCourseAssignment.findFirst({
+      await db.batchCourseAssignment.findFirst({
         where: {
           batchId: section.batchId,
           courseId: dto.courseId,
           semesterNumber: semesterNumber,
-          OR: [
-            { sectionId: null }, // Batch-wide
-            { sectionId: dto.sectionId }, // Section-specific
-          ],
         },
       });
 
@@ -84,113 +114,119 @@ export class AllocationsService {
       );
     }
 
-    try {
-      // Create allocation and auto-enroll students in a transaction
-      return await this.prisma.$transaction(async (tx) => {
-        // Create the allocation
-        const allocation = await tx.courseAllocation.create({
-          data: {
-            courseId: dto.courseId,
-            facultyId: dto.facultyId,
-            sectionId: dto.sectionId,
-            semesterNumber: semesterNumber,
-            academicSessionId,
-            status: 'active',
+    // The transactional body, runnable either inside an existing tx or a new one.
+    const run = async (client: any) => {
+      // Create the allocation
+      const allocation = await client.courseAllocation.create({
+        data: {
+          courseId: dto.courseId,
+          facultyId: dto.facultyId,
+          sectionId: dto.sectionId,
+          semesterNumber: semesterNumber,
+          academicSessionId,
+          status: ALLOCATION_STATUS.ACTIVE,
+        },
+        include: {
+          course: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              creditHours: true,
+            },
           },
-          include: {
-            course: {
-              select: {
-                id: true,
-                code: true,
-                name: true,
-                creditHours: true,
-              },
+          faculty: {
+            select: {
+              id: true,
+              firstName: true,
+              middleName: true,
+              lastName: true,
+              employeeNumber: true,
+              designation: true,
             },
-            faculty: {
-              select: {
-                id: true,
-                firstName: true,
-                middleName: true,
-                lastName: true,
-                employeeNumber: true,
-                designation: true,
-              },
-            },
-            section: {
-              select: {
-                id: true,
-                name: true,
-                batch: {
-                  select: {
-                    id: true,
-                    name: true,
-                  },
+          },
+          section: {
+            select: {
+              id: true,
+              name: true,
+              batch: {
+                select: {
+                  id: true,
+                  name: true,
                 },
               },
             },
-            academicSession: {
-              select: {
-                id: true,
-                name: true,
-              },
+          },
+          academicSession: {
+            select: {
+              id: true,
+              name: true,
             },
           },
-        });
+        },
+      });
 
-        // Auto-enroll all students in this section/semester/session
-        const studentRecords = await tx.studentAcademicRecord.findMany({
-          where: {
-            sectionId: dto.sectionId,
-            semesterNumber: semesterNumber,
-            academicSessionId: academicSessionId,
-          },
-          select: {
-            id: true,
-            student: {
-              select: {
-                stdRegNumber: true,
-              },
+      // Auto-enroll all students in this section/semester/session
+      const studentRecords = await client.studentAcademicRecord.findMany({
+        where: {
+          sectionId: dto.sectionId,
+          semesterNumber: semesterNumber,
+          academicSessionId: academicSessionId,
+        },
+        select: {
+          id: true,
+          student: {
+            select: {
+              stdRegNumber: true,
             },
           },
-        });
+        },
+      });
 
-        let enrolledCount = 0;
-        let skippedCount = 0;
+      let enrolledCount = 0;
+      let skippedCount = 0;
 
-        for (const record of studentRecords) {
-          try {
-            await tx.courseEnrollment.create({
-              data: {
-                studentAcademicRecordId: record.id,
-                courseId: dto.courseId,
-                allocationId: allocation.id,
-                status: 'enrolled',
-                isExtra: false,
-              },
-            });
-            enrolledCount++;
-          } catch (err: any) {
-            // Skip if already enrolled (P2002 = unique constraint)
-            if (err.code === 'P2002') {
-              skippedCount++;
-            } else {
-              console.error(
-                `Failed to enroll student ${record.student.stdRegNumber}:`,
-                err.message,
-              );
-            }
+      for (const record of studentRecords) {
+        try {
+          await client.courseEnrollment.create({
+            data: {
+              studentAcademicRecordId: record.id,
+              courseId: dto.courseId,
+              allocationId: allocation.id,
+              status: ENROLLMENT_STATUS.ENROLLED,
+              isExtra: false,
+            },
+          });
+          enrolledCount++;
+        } catch (err: any) {
+          // Skip if already enrolled (P2002 = unique constraint)
+          if (err.code === 'P2002') {
+            skippedCount++;
+          } else {
+            this.logger.error(
+              `Failed to enroll student ${record.student.stdRegNumber}:`,
+              err.message,
+            );
           }
         }
+      }
 
-        console.log(
-          `[ALLOCATION] Created allocation for ${course.code} in ${section.name}`,
-        );
-        console.log(
-          `[AUTO-ENROLL] Enrolled ${enrolledCount} students, skipped ${skippedCount}`,
-        );
+      this.logger.log(
+        `[ALLOCATION] Created allocation for ${course.code} in ${section.name}`,
+      );
+      this.logger.log(
+        `[AUTO-ENROLL] Enrolled ${enrolledCount} students, skipped ${skippedCount}`,
+      );
 
-        return allocation;
-      });
+      return allocation;
+    };
+
+    try {
+      // When called from bulkCreate, reuse the caller's transaction (#8).
+      if (tx) {
+        return await run(tx);
+      }
+      return await this.prisma.$transaction(run);
     } catch (e: any) {
       if (e.code === 'P2002') {
         throw new ConflictException(
@@ -210,21 +246,12 @@ export class AllocationsService {
     semesterNumber: number,
     sectionId?: string,
   ) {
+    // Courses are defined per batch + semester and shared across all sections,
+    // so there is no per-section filtering anymore.
     const whereClause: any = {
       batchId,
       semesterNumber,
     };
-
-    // If sectionId is provided, get courses for that section OR batch-wide courses
-    if (sectionId) {
-      whereClause.OR = [
-        { sectionId: null }, // Batch-wide courses
-        { sectionId }, // Section-specific courses
-      ];
-    } else {
-      // If no sectionId, only get batch-wide courses
-      whereClause.sectionId = null;
-    }
 
     const assignments = await this.prisma.batchCourseAssignment.findMany({
       where: whereClause,
@@ -259,34 +286,32 @@ export class AllocationsService {
    * Bulk create allocations (multiple courses for same teacher/section)
    */
   async bulkCreate(dto: BulkAllocationDto) {
-    const results: any[] = [];
-    const errors: Array<{ courseId: string; error: string }> = [];
-
-    for (const courseId of dto.courseIds) {
-      try {
-        const allocation = await this.create({
-          facultyId: dto.facultyId,
-          courseId,
-          sectionId: dto.sectionId,
-        });
+    // All-or-nothing: the whole batch shares ONE transaction, so a single
+    // failure rolls back every allocation created in this call (#8).
+    return this.prisma.$transaction(async (tx) => {
+      const results: any[] = [];
+      for (const courseId of dto.courseIds) {
+        const allocation = await this.create(
+          {
+            facultyId: dto.facultyId,
+            courseId,
+            sectionId: dto.sectionId,
+          },
+          tx,
+        );
         results.push(allocation);
-      } catch (error: any) {
-        errors.push({
-          courseId,
-          error: error.message,
-        });
       }
-    }
 
-    return {
-      success: results,
-      errors,
-      summary: {
-        total: dto.courseIds.length,
-        created: results.length,
-        failed: errors.length,
-      },
-    };
+      return {
+        success: results,
+        errors: [],
+        summary: {
+          total: dto.courseIds.length,
+          created: results.length,
+          failed: 0,
+        },
+      };
+    });
   }
 
   /**
@@ -295,21 +320,27 @@ export class AllocationsService {
    * Returns paginated results
    */
   async findAll(query: GetAllocationsQueryDto = {}) {
-    // Always filter by active session
-    const activeSession = await this.prisma.academicSession.findFirst({
-      where: { status: 'ACTIVE' },
-      orderBy: { startDate: 'desc' },
-    });
-    if (!activeSession) {
-      throw new BadRequestException(
-        'No active academic session found. Please activate a session in Academic Management first.',
-      );
+    // Resolve the session scope (#14):
+    //  - allSessions  -> no session filter (historical view)
+    //  - academicSessionId -> that specific session
+    //  - otherwise    -> default to the active session (backward compatible)
+    let sessionFilter: string | undefined;
+    if (!query.allSessions) {
+      if (query.academicSessionId) {
+        sessionFilter = query.academicSessionId;
+      } else {
+        const activeSession = await this.prisma.academicSession.findFirst({
+          where: { status: ACADEMIC_SESSION_STATUS.ACTIVE },
+          orderBy: { startDate: 'desc' },
+        });
+        sessionFilter = activeSession?.id;
+      }
     }
 
     const where: any = {
-      status: query.status || 'active',
-      academicSessionId: activeSession.id, // Always use active session
+      status: query.status || ALLOCATION_STATUS.ACTIVE,
     };
+    if (sessionFilter) where.academicSessionId = sessionFilter;
 
     if (query.facultyId) where.facultyId = query.facultyId;
     if (query.sectionId) where.sectionId = query.sectionId;
@@ -406,7 +437,6 @@ export class AllocationsService {
       where: {
         batchId: section.batchId,
         semesterNumber,
-        OR: [{ sectionId: null }, { sectionId }],
       },
       include: {
         course: true,
@@ -455,14 +485,44 @@ export class AllocationsService {
   }
 
   /**
-   * Remove allocation (soft delete)
+   * Remove allocation (soft delete) and deactivate the enrollments it owned.
    */
   async remove(id: string) {
-    await this.findOne(id); // Validate exists
-    await this.prisma.courseAllocation.update({
-      where: { id },
-      data: { status: 'inactive' },
+    const allocation = await this.findOne(id); // Validate exists
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.courseAllocation.update({
+        where: { id },
+        data: { status: ALLOCATION_STATUS.INACTIVE },
+      });
+
+      // Drop enrollments that were tied to this allocation, but only when no
+      // OTHER active allocation still covers the same course/section/session
+      // (prevents orphaned "enrolled but inactive" rows — #3).
+      const affected = await tx.courseEnrollment.findMany({
+        where: { allocationId: id, status: ENROLLMENT_STATUS.ENROLLED },
+        select: { id: true, courseId: true },
+      });
+
+      for (const e of affected) {
+        const otherActive = await tx.courseAllocation.findFirst({
+          where: {
+            id: { not: id },
+            status: ALLOCATION_STATUS.ACTIVE,
+            courseId: e.courseId,
+            sectionId: allocation.sectionId,
+            academicSessionId: allocation.academicSessionId,
+          },
+        });
+        if (!otherActive) {
+          await tx.courseEnrollment.update({
+            where: { id: e.id },
+            data: { status: ENROLLMENT_STATUS.DROPPED, droppedAt: new Date() },
+          });
+        }
+      }
+
+      return { id, message: 'Allocation removed successfully' };
     });
-    return { id, message: 'Allocation removed successfully' };
   }
 }

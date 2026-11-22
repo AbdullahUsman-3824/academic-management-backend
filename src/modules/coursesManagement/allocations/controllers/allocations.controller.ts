@@ -8,7 +8,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { AllocationsService } from '../service/allocations.service';
+import { AllocationsService } from '../services/allocations.service';
 import {
   CreateAllocationDto,
   BulkAllocationDto,

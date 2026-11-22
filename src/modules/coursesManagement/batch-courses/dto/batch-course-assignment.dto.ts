@@ -6,7 +6,6 @@ import {
   Min,
   Max,
   IsArray,
-  ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -14,16 +13,12 @@ export class CreateBatchCourseAssignmentDto {
   @IsUUID()
   batchId: string;
 
-  @IsOptional()
-  @IsUUID()
-  sectionId?: string;
-
   @IsUUID()
   courseId: string;
 
   @IsInt()
   @Min(1)
-  @Max(10)
+  @Max(8)
   semesterNumber: number;
 
   @IsBoolean()
@@ -39,13 +34,9 @@ export class BulkAssignCoursesDto {
   @IsUUID()
   batchId: string;
 
-  @IsOptional()
-  @IsUUID()
-  sectionId?: string;
-
   @IsInt()
   @Min(1)
-  @Max(10)
+  @Max(8)
   semesterNumber: number;
 
   @IsArray()
@@ -72,21 +63,16 @@ export class GetBatchCoursesQueryDto {
   batchId: string;
 
   @IsOptional()
-  @IsUUID('4')
-  sectionId?: string;
-
-  @IsOptional()
   @IsInt()
   @Type(() => Number)
   @Min(1)
-  @Max(10)
+  @Max(8)
   semesterNumber?: number;
 }
 
 export class BatchCourseAssignmentResponseDto {
   id: string;
   batchId: string;
-  sectionId: string | null;
   courseId: string;
   semesterNumber: number;
   isCompulsory: boolean;
@@ -99,10 +85,6 @@ export class BatchCourseAssignmentResponseDto {
     id: string;
     name: string;
   };
-  section?: {
-    id: string;
-    name: string;
-  } | null;
   course?: {
     id: string;
     code: string;

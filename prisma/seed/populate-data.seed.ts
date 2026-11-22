@@ -224,7 +224,6 @@ export async function populateRealData(prismaInstance: PrismaClient) {
             },
             create: {
               semesterId: semester.id,
-              semesterNumber: semester.number,
               courseId: course.id,
               isCompulsory: true,
               displayOrder: semesterCourses.indexOf(courseData) + 1,

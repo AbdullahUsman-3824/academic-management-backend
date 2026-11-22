@@ -9,7 +9,7 @@ import {
   ParseUUIDPipe,
   ParseIntPipe,
 } from '@nestjs/common';
-import { SemesterCoursesService } from '../service/semester-courses.service';
+import { SemesterCoursesService } from '../services/semester-courses.service';
 import {
   CreateSemesterCourseDto,
   BulkSemesterCourseDto,

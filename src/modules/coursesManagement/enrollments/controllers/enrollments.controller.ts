@@ -9,7 +9,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { EnrollmentsService } from '../service/enrollments.service';
+import { EnrollmentsService } from '../services/enrollments.service';
 import {
   CreateEnrollmentDto,
   UpdateEnrollmentStatusDto,

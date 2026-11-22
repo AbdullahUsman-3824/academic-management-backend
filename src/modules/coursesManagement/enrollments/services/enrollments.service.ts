@@ -1,23 +1,65 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../../database/prisma.service';
-import { BatchCourseAssignmentsService } from '../../batch-courses/service/batch-course-assignments.service';
+import { BatchCourseAssignmentsService } from '../../batch-courses/services/batch-course-assignments.service';
 import {
   CreateEnrollmentDto,
   UpdateEnrollmentStatusDto,
   BulkEnrollDto,
 } from '../dto/enrollment.dto';
+import {
+  ACADEMIC_SESSION_STATUS,
+  ENROLLMENT_STATUS,
+  STUDENT_RECORD_STATUS,
+  ALLOCATION_STATUS,
+} from '../../../../common/constants/status.constants';
 
 @Injectable()
 export class EnrollmentsService {
+  private readonly logger = new Logger(EnrollmentsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly batchCourseService: BatchCourseAssignmentsService,
   ) {}
+
+  /**
+   * Credit-hour load for a student's current semester, summed over active
+   * (non-dropped) enrollments. Used to enforce Semester.min/maxCredits.
+   */
+  private async currentCreditLoad(
+    prisma: any,
+    studentAcademicRecordId: string,
+  ): Promise<{ credits: number; maxCredits: number | null }> {
+    const record = await prisma.studentAcademicRecord.findUnique({
+      where: { id: studentAcademicRecordId },
+      select: { semesterNumber: true },
+    });
+    const semester = record?.semesterNumber
+      ? await prisma.semester.findUnique({
+          where: { number: record.semesterNumber },
+          select: { maxCredits: true },
+        })
+      : null;
+
+    const enrolled = await prisma.courseEnrollment.findMany({
+      where: {
+        studentAcademicRecordId,
+        status: { not: ENROLLMENT_STATUS.DROPPED },
+      },
+      include: { course: { select: { creditHours: true } } },
+    });
+    const credits = enrolled.reduce(
+      (sum, e) => sum + (e.course?.creditHours || 0),
+      0,
+    );
+    return { credits, maxCredits: semester?.maxCredits ?? null };
+  }
 
   async create(dto: CreateEnrollmentDto) {
     let studentAcademicRecordId = dto.studentAcademicRecordId;
@@ -26,7 +68,7 @@ export class EnrollmentsService {
     if (!studentAcademicRecordId && dto.studentId) {
       // Get active academic session
       const activeSession = await this.prisma.academicSession.findFirst({
-        where: { status: 'ACTIVE' },
+        where: { status: ACADEMIC_SESSION_STATUS.ACTIVE },
         orderBy: { startDate: 'desc' },
       });
 
@@ -137,6 +179,17 @@ export class EnrollmentsService {
       }
     }
 
+    // Enforce the semester credit-hour ceiling (#7)
+    const { credits, maxCredits } = await this.currentCreditLoad(
+      this.prisma,
+      studentAcademicRecordId,
+    );
+    if (maxCredits != null && credits + course.creditHours > maxCredits) {
+      throw new BadRequestException(
+        `Enrolling in ${course.code} would exceed the maximum credit hours for this semester (${credits} + ${course.creditHours} > ${maxCredits}).`,
+      );
+    }
+
     try {
       return await this.prisma.courseEnrollment.create({
         data: {
@@ -144,7 +197,7 @@ export class EnrollmentsService {
           courseId: dto.courseId,
           isExtra: dto.isExtra ?? false,
           allocationId: dto.allocationId,
-          status: 'enrolled',
+          status: ENROLLMENT_STATUS.ENROLLED,
         },
         include: {
           course: true,
@@ -235,7 +288,7 @@ export class EnrollmentsService {
   }) {
     // Always filter by active session
     const activeSession = await this.prisma.academicSession.findFirst({
-      where: { status: 'ACTIVE' },
+      where: { status: ACADEMIC_SESSION_STATUS.ACTIVE },
       orderBy: { startDate: 'desc' },
     });
 
@@ -461,7 +514,12 @@ export class EnrollmentsService {
 
   async remove(id: string) {
     await this.findOne(id);
-    await this.prisma.courseEnrollment.delete({ where: { id } });
+    // Soft delete: mark as dropped instead of deleting, so existing marks /
+    // results stay linked and auditable (#10).
+    await this.prisma.courseEnrollment.update({
+      where: { id },
+      data: { status: ENROLLMENT_STATUS.DROPPED, droppedAt: new Date() },
+    });
     return { id };
   }
 
@@ -506,7 +564,7 @@ export class EnrollmentsService {
 
     // Get active academic session
     const activeSession = await this.prisma.academicSession.findFirst({
-      where: { status: 'ACTIVE' },
+      where: { status: ACADEMIC_SESSION_STATUS.ACTIVE },
       orderBy: { startDate: 'desc' },
     });
 
@@ -609,7 +667,7 @@ export class EnrollmentsService {
         );
 
       if (batchCourses.length === 0) {
-        console.warn(
+        this.logger.warn(
           `[AUTO-ENROLL] No courses assigned to Batch ${batchId}, Semester ${semesterNumber}`,
         );
         return { created: [], skipped: 0, errors: [] };
@@ -622,16 +680,36 @@ export class EnrollmentsService {
       const errors: Array<{ courseId: string; error: string }> = [];
       let skipped = 0;
 
+      // Enforce the semester credit-hour ceiling even in auto-enrollment (#7)
+      const { credits: startCredits, maxCredits } = await this.currentCreditLoad(
+        prisma,
+        studentAcademicRecordId,
+      );
+      let runningCredits = startCredits;
+
       for (const course of compulsoryCourses) {
+        if (
+          maxCredits != null &&
+          runningCredits + course.creditHours > maxCredits
+        ) {
+          skipped++;
+          this.logger.warn(
+            `[AUTO-ENROLL] ⊘ ${course.code} skipped — would exceed max credits for the semester (${runningCredits} + ${course.creditHours} > ${maxCredits})`,
+          );
+          continue;
+        }
+
         try {
           await prisma.courseEnrollment.create({
             data: {
               studentAcademicRecordId,
               courseId: course.id,
-              status: 'enrolled',
+              status: ENROLLMENT_STATUS.ENROLLED,
               isExtra: false,
             },
           });
+
+          runningCredits += course.creditHours;
 
           created.push({
             courseId: course.id,
@@ -640,144 +718,30 @@ export class EnrollmentsService {
             creditHours: course.creditHours,
           });
 
-          console.log(
+          this.logger.log(
             `[AUTO-ENROLL] ✓ ${course.code}: ${course.name} (Semester ${semesterNumber})`,
           );
         } catch (error: any) {
           if (error.code === 'P2002') {
             skipped++;
-            console.debug(
+            this.logger.debug(
               `[AUTO-ENROLL] ⊘ Student already enrolled in ${course.code}`,
             );
           } else {
             errors.push({ courseId: course.id, error: error.message });
-            console.error(`[AUTO-ENROLL] ✗ ${course.code}: ${error.message}`);
+            this.logger.error(`[AUTO-ENROLL] ✗ ${course.code}: ${error.message}`);
           }
         }
       }
 
-      console.log(
+      this.logger.log(
         `[AUTO-ENROLL] Semester ${semesterNumber} complete: ` +
           `${created.length} created, ${skipped} skipped, ${errors.length} errors`,
       );
 
       return { created, skipped, errors };
     } catch (error: any) {
-      console.error('[AUTO-ENROLL] Fatal error:', error);
-      throw new BadRequestException(
-        `Auto-enrollment failed: ${error.message}`,
-      );
-    }
-  }
-
-  /**
-   * DEPRECATED: Old method using SemesterCourses
-   * Keep for backward compatibility during migration
-   */
-  async autoEnrollInSemesterCourses(
-    studentAcademicRecordId: string,
-    semesterId: string,
-    tx?: any,
-  ): Promise<{
-    created: Array<{
-      courseId: string;
-      courseCode: string;
-      courseName: string;
-      creditHours: number;
-    }>;
-    skipped: number;
-    errors: Array<{ courseId: string; error: string }>;
-  }> {
-    const prisma = tx || this.prisma;
-    try {
-      const semesterCourses = await prisma.semesterCourse.findMany({
-        where: {
-          semesterId,
-          isCompulsory: true,
-        },
-        include: {
-          course: {
-            select: {
-              id: true,
-              code: true,
-              name: true,
-              status: true,
-              creditHours: true,
-            },
-          },
-          semester: {
-            select: {
-              number: true,
-              name: true,
-              displayName: true,
-            },
-          },
-        },
-        orderBy: { displayOrder: 'asc' },
-      });
-
-      const activeCourses = semesterCourses.filter(
-        (sc) => sc.course.status === 'active',
-      );
-
-      if (activeCourses.length === 0) {
-        const semesterName =
-          semesterCourses[0]?.semester?.displayName ?? semesterId;
-        console.warn(
-          `[AUTO-ENROLL] No active compulsory courses for ${semesterName}`,
-        );
-        return { created: [], skipped: 0, errors: [] };
-      }
-
-      const created: any[] = [];
-      const errors: Array<{ courseId: string; error: string }> = [];
-      let skipped = 0;
-
-      for (const sc of activeCourses) {
-        try {
-          await prisma.courseEnrollment.create({
-            data: {
-              studentAcademicRecordId,
-              courseId: sc.courseId,
-              status: 'enrolled',
-              isExtra: false,
-            },
-          });
-
-          created.push({
-            courseId: sc.courseId,
-            courseCode: sc.course.code,
-            courseName: sc.course.name,
-            creditHours: sc.course.creditHours,
-          });
-
-          console.log(
-            `[AUTO-ENROLL] ✓ ${sc.course.code}: ${sc.course.name} ` +
-              `(${sc.semester.displayName})`,
-          );
-        } catch (error: any) {
-          if (error.code === 'P2002') {
-            skipped++;
-            console.debug(
-              `[AUTO-ENROLL] ⊘ Student already enrolled in ${sc.course.code}`,
-            );
-          } else {
-            errors.push({ courseId: sc.courseId, error: error.message });
-            console.error(
-              `[AUTO-ENROLL] ✗ ${sc.course.code}: ${error.message}`,
-            );
-          }
-        }
-      }
-
-      console.log(
-        `[AUTO-ENROLL] ${semesterCourses[0]?.semester?.displayName} complete: ` +
-          `${created.length} created, ${skipped} skipped, ${errors.length} errors`,
-      );
-
-      return { created, skipped, errors };
-    } catch (error: any) {
-      console.error('[AUTO-ENROLL] Fatal error:', error);
+      this.logger.error('[AUTO-ENROLL] Fatal error:', error);
       throw new BadRequestException(
         `Auto-enrollment failed: ${error.message}`,
       );
@@ -799,7 +763,7 @@ export class EnrollmentsService {
     let sessionId = options?.academicSessionId;
     if (!sessionId) {
       const activeSession = await this.prisma.academicSession.findFirst({
-        where: { status: 'ACTIVE' },
+        where: { status: ACADEMIC_SESSION_STATUS.ACTIVE },
         orderBy: { startDate: 'desc' },
       });
       if (!activeSession) {
@@ -811,7 +775,7 @@ export class EnrollmentsService {
     // Build filter for academic records
     const recordWhere: any = {
       academicSessionId: sessionId,
-      status: 'ENROLLED',
+      status: STUDENT_RECORD_STATUS.ENROLLED,
     };
     if (options?.batchId) {
       recordWhere.batchId = options.batchId;
@@ -837,7 +801,7 @@ export class EnrollmentsService {
       },
     });
 
-    console.log(
+    this.logger.log(
       `[BULK RE-ENROLL] Found ${academicRecords.length} student records`,
     );
 
@@ -865,22 +829,26 @@ export class EnrollmentsService {
       try {
         const enrollmentsBefore = record._count.courseEnrollments;
 
-        // Skip if student already has enrollments (unless they have 0)
-        if (enrollmentsBefore > 0) {
-          console.log(
-            `[BULK RE-ENROLL] Skipping ${record.student.stdRegNumber} - already has ${enrollmentsBefore} enrollments`,
-          );
-          continue;
-        }
+        // Do NOT skip students who already have enrollments. Instead we top-up
+        // only the batch courses they are still missing (#4).
 
         if (dryRun) {
-          // Dry run: just check what would be enrolled
+          // Dry run: report only the compulsory courses not yet enrolled
           const batchCourses =
             await this.batchCourseService.getCoursesForEnrollment(
               record.batchId,
               record.semesterNumber,
             );
           const compulsoryCourses = batchCourses.filter((c) => c.isCompulsory);
+
+          const existing = await this.prisma.courseEnrollment.findMany({
+            where: { studentAcademicRecordId: record.id },
+            select: { courseId: true },
+          });
+          const existingCourseIds = new Set(existing.map((e) => e.courseId));
+          const missingCourses = compulsoryCourses.filter(
+            (c) => !existingCourseIds.has(c.id),
+          );
 
           results.push({
             studentId: record.studentId,
@@ -890,15 +858,15 @@ export class EnrollmentsService {
             batchId: record.batchId,
             semesterNumber: record.semesterNumber,
             enrollmentsBefore,
-            enrollmentsCreated: compulsoryCourses.length,
-            coursesEnrolled: compulsoryCourses.map((c) => ({
+            enrollmentsCreated: missingCourses.length,
+            coursesEnrolled: missingCourses.map((c) => ({
               courseCode: c.code,
               courseName: c.name,
             })),
             errors: [],
           });
 
-          totalEnrollmentsCreated += compulsoryCourses.length;
+          totalEnrollmentsCreated += missingCourses.length;
           studentsProcessed++;
         } else {
           // Actual enrollment
@@ -927,12 +895,12 @@ export class EnrollmentsService {
           totalEnrollmentsCreated += enrollResult.created.length;
           studentsProcessed++;
 
-          console.log(
+          this.logger.log(
             `[BULK RE-ENROLL] ✓ ${record.student.stdRegNumber}: ${enrollResult.created.length} courses enrolled`,
           );
         }
       } catch (error: any) {
-        console.error(
+        this.logger.error(
           `[BULK RE-ENROLL] ✗ ${record.student.stdRegNumber}: ${error.message}`,
         );
         globalErrors.push({
@@ -951,7 +919,7 @@ export class EnrollmentsService {
       totalErrors: globalErrors.length,
     };
 
-    console.log(
+    this.logger.log(
       `[BULK RE-ENROLL] Summary: ${studentsProcessed} students processed, ${totalEnrollmentsCreated} enrollments created`,
     );
 

@@ -26,20 +26,16 @@ export class SemesterCoursesService {
     if (!semester) throw new NotFoundException('Semester not found');
 
     try {
-      // Get semester number for backward compatibility
-      const semesterNumber = semester.number;
-
       return await this.prisma.semesterCourse.create({
         data: {
-          semesterId: dto.semesterId, // CHANGED
-          semesterNumber, // Keep for backward compatibility
+          semesterId: dto.semesterId,
           courseId: dto.courseId,
           isCompulsory: dto.isCompulsory ?? true,
           displayOrder: dto.displayOrder ?? 0,
         },
         include: {
           course: true,
-          semester: true, // NEW: Include semester details
+          semester: true,
         },
       });
     } catch (e: any) {
