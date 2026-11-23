@@ -253,7 +253,6 @@ export class SectionService {
         const studentCount = await client.studentAcademicRecord.count({
           where: {
             sectionId: s.id,
-            batchId,
             status: 'ENROLLED',
           },
         });

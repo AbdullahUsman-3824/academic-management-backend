@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../../../database/prisma.service';
+import { Prisma } from '../../../../generated/prisma/client';
 import { CreateAssessmentDto, UpdateAssessmentDto } from '../dto/create-assessment.dto';
 import { BulkMarkEntryDto, UpdateStudentMarkDto } from '../dto/student-marks.dto';
 
@@ -124,7 +125,7 @@ export class AssessmentService {
         assessmentCategory: true,
         courseAllocation: {
           include: {
-            course: true,
+            batchCourseAssignment: { include: { course: true } },
             section: true,
             academicSession: true,
           },
@@ -145,10 +146,22 @@ export class AssessmentService {
     // Get marks for this assessment
     const marks = await this.prisma.studentMark.findMany({
       where: { assessmentId },
+      include: {
+        courseEnrollment: {
+          include: {
+            studentAcademicRecord: { include: { student: true } },
+          },
+        },
+      },
     });
 
     // Map marks to students
-    const marksMap = new Map(marks.map(m => [m.studentId, m]));
+    const marksMap = new Map(
+      marks.map((m) => [
+        m.courseEnrollment.studentAcademicRecord.studentId,
+        m,
+      ]),
+    );
 
     const studentsWithMarks = students.map(student => ({
       studentId: student.id,
@@ -196,26 +209,31 @@ export class AssessmentService {
 
     // Validate marks against total marks
     for (const mark of dto.marks) {
-      if (mark.marksObtained > Number(assessment.totalMarks)) {
+      if (mark.marksObtained > Number(assessment.totalMarks.toString())) {
         throw new BadRequestException(
-          `Marks obtained (${mark.marksObtained}) cannot exceed total marks (${assessment.totalMarks})`
+          `Marks obtained (${mark.marksObtained}) cannot exceed total marks (${assessment.totalMarks.toString()})`
         );
       }
     }
 
-    // Use transaction to create/update marks
-    return this.prisma.$transaction(
-      dto.marks.map(mark =>
-        this.prisma.studentMark.upsert({
+    return this.prisma.$transaction(async (tx) => {
+      const results: Prisma.StudentMarkGetPayload<object>[] = [];
+      for (const mark of dto.marks) {
+        const enrollment = await this.resolveEnrollment(
+          tx,
+          assessment.courseAllocationId,
+          mark.studentId,
+        );
+        results.push(await tx.studentMark.upsert({
           where: {
-            assessmentId_studentId: {
+            assessmentId_courseEnrollmentId: {
               assessmentId: dto.assessmentId,
-              studentId: mark.studentId,
+              courseEnrollmentId: enrollment.id,
             },
           },
           create: {
             assessmentId: dto.assessmentId,
-            studentId: mark.studentId,
+            courseEnrollmentId: enrollment.id,
             marksObtained: mark.marksObtained,
             remarks: mark.remarks,
             enteredBy: faculty.id,
@@ -225,9 +243,10 @@ export class AssessmentService {
             remarks: mark.remarks,
             updatedBy: faculty.id,
           },
-        })
-      )
-    );
+        }));
+      }
+      return results;
+    });
   }
 
   // Update single student mark
@@ -249,9 +268,9 @@ export class AssessmentService {
     await this.verifyAllocationOwnership(assessment.courseAllocationId, facultyUserId);
 
     // Validate marks
-    if (dto.marksObtained > Number(assessment.totalMarks)) {
+    if (dto.marksObtained > Number(assessment.totalMarks.toString())) {
       throw new BadRequestException(
-        `Marks obtained (${dto.marksObtained}) cannot exceed total marks (${assessment.totalMarks})`
+        `Marks obtained (${dto.marksObtained}) cannot exceed total marks (${assessment.totalMarks.toString()})`
       );
     }
 
@@ -263,16 +282,21 @@ export class AssessmentService {
       throw new NotFoundException('Faculty not found');
     }
 
+    const enrollment = await this.resolveEnrollment(
+      this.prisma,
+      assessment.courseAllocationId,
+      studentId,
+    );
     return this.prisma.studentMark.upsert({
       where: {
-        assessmentId_studentId: {
+        assessmentId_courseEnrollmentId: {
           assessmentId,
-          studentId,
+          courseEnrollmentId: enrollment.id,
         },
       },
       create: {
         assessmentId,
-        studentId,
+        courseEnrollmentId: enrollment.id,
         marksObtained: dto.marksObtained,
         remarks: dto.remarks,
         enteredBy: faculty.id,
@@ -332,12 +356,32 @@ export class AssessmentService {
   }
 
   // Helper: Get enrolled students for an allocation
+  private async resolveEnrollment(
+    client: PrismaService | Prisma.TransactionClient,
+    allocationId: string,
+    studentId: string,
+  ) {
+    const enrollment = await client.courseEnrollment.findFirst({
+      where: {
+        allocationId,
+        studentAcademicRecord: { studentId },
+        status: 'enrolled',
+      },
+    });
+    if (!enrollment) {
+      throw new BadRequestException(
+        'Student is not enrolled in this course allocation',
+      );
+    }
+    return enrollment;
+  }
+
   private async getEnrolledStudents(allocationId: string) {
     const allocation = await this.prisma.courseAllocation.findUnique({
       where: { id: allocationId },
       include: {
         section: true,
-        course: true,
+        batchCourseAssignment: { include: { course: true } },
       },
     });
 
@@ -345,38 +389,27 @@ export class AssessmentService {
       throw new NotFoundException('Allocation not found');
     }
 
-    // Get all academic records for this section and session
-    const academicRecords = await this.prisma.studentAcademicRecord.findMany({
-      where: {
-        sectionId: allocation.sectionId,
-        academicSessionId: allocation.academicSessionId,
-        semesterNumber: allocation.semesterNumber,
-      },
-      include: {
-        student: true,
-      },
-    });
-
-    // Get course enrollments for these records
     const enrollments = await this.prisma.courseEnrollment.findMany({
-      where: {
-        courseId: allocation.courseId,
-        studentAcademicRecordId: {
-          in: academicRecords.map(r => r.id),
+      where: { allocationId, status: 'enrolled' },
+      include: {
+        studentAcademicRecord: {
+          include: {
+            student: true,
+            section: true,
+          },
         },
       },
     });
 
-    const enrolledRecordIds = new Set(enrollments.map(e => e.studentAcademicRecordId));
-
-    // Filter records that have enrollments
-    return academicRecords
-      .filter(record => enrolledRecordIds.has(record.id))
-      .map(record => ({
-        id: record.student.id,
-        rollNumber: record.student.stdRegNumber,
-        name: `${record.student.firstName} ${record.student.middleName || ''} ${record.student.lastName || ''}`.trim(),
-        sectionName: allocation.section.name,
-      }));
+    return enrollments.map((enrollment) => {
+      const record = enrollment.studentAcademicRecord;
+      const student = record.student;
+      return {
+        id: student.id,
+        rollNumber: student.stdRegNumber,
+        name: `${student.firstName} ${student.middleName || ''} ${student.lastName || ''}`.trim(),
+        sectionName: record.section.name,
+      };
+    });
   }
 }

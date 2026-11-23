@@ -127,8 +127,12 @@ export class CoursesService {
     await this.findOne(id);
 
     const [enrollments, allocations] = await Promise.all([
-      this.prisma.courseEnrollment.count({ where: { courseId: id } }),
-      this.prisma.courseAllocation.count({ where: { courseId: id } }),
+      this.prisma.courseEnrollment.count({
+        where: { allocation: { batchCourseAssignment: { courseId: id } } },
+      }),
+      this.prisma.courseAllocation.count({
+        where: { batchCourseAssignment: { courseId: id } },
+      }),
     ]);
 
     if (enrollments > 0 || allocations > 0) {

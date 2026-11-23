@@ -104,12 +104,11 @@ export class AcademicProgressionService {
         },
         academicRecords: {
           where: { academicSessionId: { not: sessionId } },
-          orderBy: { semesterNumber: 'desc' },
+          orderBy: { semester: { number: 'desc' } },
           take: 1,
           select: {
-            semesterNumber: true,
             semesterId: true,
-            semester: { select: { id: true, number: true, name: true } },
+            semester: { select: { id: true, number: true } },
             sectionId: true,
             section: { select: { name: true } },
           },
@@ -124,10 +123,10 @@ export class AcademicProgressionService {
    * Preview aur implement dono me same logic.
    */
   private computeSemesters(
-    latest: { semesterNumber: number; semester: { number: number } | null },
+    latest: { semester: { number: number } },
     programDuration: number,
   ) {
-    const current = latest.semester?.number ?? latest.semesterNumber;
+    const current = latest.semester.number;
     const max = programDuration * 2; // 5 years -> 10 semesters
     const target = Math.min(current + 1, max);
     return { current, target };
@@ -143,7 +142,7 @@ export class AcademicProgressionService {
     const session = await this.resolveSessionForProgression(academicSessionId);
 
     const semesters = await this.prisma.semester.findMany({
-      select: { id: true, number: true, name: true },
+      select: { id: true, number: true },
       orderBy: { number: 'asc' },
     });
     const semesterMap = new Map(semesters.map((s) => [s.number, s]));
@@ -190,10 +189,10 @@ export class AcademicProgressionService {
         transition = {
           fromSemester: current,
           fromSemesterId: latest.semester?.id ?? currentSem?.id ?? null,
-          fromSemesterName: latest.semester?.name ?? currentSem?.name ?? null,
+          fromSemesterName: `Semester ${current}`,
           toSemester: target,
           toSemesterId: targetSem?.id ?? null,
-          toSemesterName: targetSem?.name ?? null,
+          toSemesterName: `Semester ${target}`,
           isFinal: target === current,
           missingTargetSemester: !targetSem,
           count: 0,
@@ -294,7 +293,6 @@ export class AcademicProgressionService {
       batchId: string;
       academicSessionId: string;
       semesterId: string;
-      semesterNumber: number;
       sectionId: string;
       status: StudentAcademicRecordStatus;
     }[] = [];
@@ -328,7 +326,6 @@ export class AcademicProgressionService {
         batchId: s.batchId,
         academicSessionId: session.id,
         semesterId: targetSemesterId,
-        semesterNumber: targetSemesterNumber, // backward compatibility
         sectionId: latest.sectionId, // same section
         status: StudentAcademicRecordStatus.ENROLLED,
       });

@@ -3,13 +3,21 @@ import { Transform } from 'class-transformer';
 
 export class QueryFacultyDto {
   @IsOptional()
-  @Transform(({ value }) => parseInt(value, 10))
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' || typeof value === 'number'
+      ? parseInt(String(value), 10)
+      : undefined,
+  )
   @IsInt()
   @Min(1)
   page?: number = 1;
 
   @IsOptional()
-  @Transform(({ value }) => parseInt(value, 10))
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' || typeof value === 'number'
+      ? parseInt(String(value), 10)
+      : undefined,
+  )
   @IsInt()
   @Min(1)
   limit?: number = 20;

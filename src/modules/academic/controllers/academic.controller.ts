@@ -45,7 +45,7 @@ export class AcademicController {
         },
       },
       select: {
-        semesterNumber: true,
+        semester: { select: { number: true } },
       },
       orderBy: {
         createdAt: 'desc',
@@ -61,7 +61,7 @@ export class AcademicController {
     return {
       success: true,
       data: {
-        semesterNumber: record.semesterNumber,
+        semesterNumber: record.semester.number,
       },
     };
   }

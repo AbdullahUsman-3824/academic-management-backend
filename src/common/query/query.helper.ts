@@ -52,14 +52,14 @@ export class QueryHelper {
    */
   async paginate<T>(
     model: {
-      findMany: (args: any) => Promise<T[]>;
-      count: (args: any) => Promise<number>;
+      findMany: (args: Record<string, unknown>) => Promise<T[]>;
+      count: (args: Record<string, unknown>) => Promise<number>;
     },
     args: {
-      where?: any;
-      orderBy?: any;
-      include?: any;
-      select?: any;
+      where?: Record<string, unknown>;
+      orderBy?: Record<string, unknown>;
+      include?: Record<string, unknown>;
+      select?: Record<string, unknown>;
     } = {},
     pagination: PaginationParams = {},
   ): Promise<PaginatedResult<T>> {

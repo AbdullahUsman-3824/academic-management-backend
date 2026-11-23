@@ -10,7 +10,7 @@ import { SectionService } from './section.service';
 import { EnrollmentsService } from '../../coursesManagement/enrollments/services/enrollments.service';
 import { Prisma } from '../../../generated/prisma/client';
 
-type Db = PrismaService | Prisma.TransactionClient;
+type Db = Prisma.TransactionClient;
 
 export interface CreateStudentAcademicRecordDto {
   studentId: string;
@@ -37,7 +37,7 @@ export class StudentAcademicRecordService {
     dto: CreateStudentAcademicRecordDto,
     client: Db = this.prisma,
   ) {
-    const { studentId, batchId, sectionId } = dto;
+    const { studentId, sectionId } = dto;
 
     let academicSessionId = dto.academicSessionId;
     const semesterNumber = dto.semesterNumber ?? 1;
@@ -50,9 +50,10 @@ export class StudentAcademicRecordService {
     // Student exists?
     const student = await client.student.findUnique({
       where: { id: studentId },
-      select: { id: true },
+      select: { id: true, batchId: true },
     });
     if (!student) throw new NotFoundException('Student not found');
+    const batchId = student.batchId;
 
     // Batch exists + active?
     const batch = await client.batch.findUnique({
@@ -128,11 +129,7 @@ export class StudentAcademicRecordService {
       const record = await client.studentAcademicRecord.create({
         data: {
           studentId,
-          batchId,
           academicSessionId,
-          // Single source of truth: derive from the Semester row, never the
-          // raw input, so the two columns can't drift (#1).
-          semesterNumber: semester.number,
           semesterId: semester.id,
           sectionId: suggested.id,
           status: 'ENROLLED',
@@ -143,6 +140,9 @@ export class StudentAcademicRecordService {
           },
           academicSession: {
             select: { id: true, name: true },
+          },
+          semester: {
+            select: { id: true, number: true },
           },
         },
       });
@@ -176,12 +176,14 @@ export class StudentAcademicRecordService {
         this.logger.log(
           `[AUTO-ENROLL] Complete: ${enrollmentResult.created.length} courses enrolled, ${enrollmentResult.skipped} skipped, ${enrollmentResult.errors.length} errors`,
         );
-      } catch (enrollError: any) {
-        this.logger.error('[AUTO-ENROLL] Failed:', enrollError.message);
+      } catch (enrollError: unknown) {
+        const message =
+          enrollError instanceof Error ? enrollError.message : String(enrollError);
+        this.logger.error('[AUTO-ENROLL] Failed:', message);
         // Don't fail the student creation if enrollment fails
         enrollmentResult.errors.push({
           courseId: 'SYSTEM',
-          error: enrollError.message,
+          error: message,
         });
       }
 
@@ -190,9 +192,9 @@ export class StudentAcademicRecordService {
         record: {
           id: record.id,
           studentId: record.studentId,
-          batchId: record.batchId,
+          batchId,
           academicSessionId: record.academicSessionId,
-          semesterNumber: record.semesterNumber,
+          semesterNumber: record.semester.number,
           sectionId: record.sectionId,
           sectionName: record.section?.name,
           status: record.status,

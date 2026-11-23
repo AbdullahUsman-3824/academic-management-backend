@@ -140,14 +140,14 @@ export class StudentsController {
 
   // ── 8. Results / Transcript ───────────────────────────────────────────────
   @Get('me/results')
-  async getMyResults(@CurrentUser() user: SafeUser) {
+  async getMyResults(@CurrentUser() _user: SafeUser) {
     // const data = await this.studentsService.getMyResults(user.id);
     // return { success: true, data };
   }
 
   // ── 9. Fees ───────────────────────────────────────────────────────────────
   @Get('me/fees')
-  async getMyFees(@CurrentUser() user: SafeUser) {
+  async getMyFees(@CurrentUser() _user: SafeUser) {
     // const data = await this.studentsService.getMyFees(user.id);
     // return { success: true, data };
   }

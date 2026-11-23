@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
   Injectable,
   Logger,
@@ -7,6 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../../database/prisma.service';
+import { Prisma } from '../../../../generated/prisma/client';
 import {
   CreateAllocationDto,
   BulkAllocationDto,
@@ -37,8 +37,8 @@ export class AllocationsService {
   /**
    * Create a single course allocation
    */
-  async create(dto: CreateAllocationDto, tx?: any) {
-    const db = tx ?? this.prisma;
+  async create(dto: CreateAllocationDto, tx?: Prisma.TransactionClient) {
+    const db = this.prisma;
 
     // Validate all foreign keys
     const [course, faculty, section] = await Promise.all([
@@ -86,7 +86,7 @@ export class AllocationsService {
         sectionId: dto.sectionId,
         academicSessionId: activeSession.id,
       },
-      select: { semesterNumber: true },
+      include: { semester: { select: { number: true } } },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -96,7 +96,7 @@ export class AllocationsService {
       );
     }
 
-    const semesterNumber = sectionRecord.semesterNumber;
+    const semesterNumber = sectionRecord.semester.number;
 
     // Validate course is assigned to this batch/semester
     const batchCourseAssignment =
@@ -104,7 +104,7 @@ export class AllocationsService {
         where: {
           batchId: section.batchId,
           courseId: dto.courseId,
-          semesterNumber: semesterNumber,
+          semester: { number: semesterNumber },
         },
       });
 
@@ -115,24 +115,28 @@ export class AllocationsService {
     }
 
     // The transactional body, runnable either inside an existing tx or a new one.
-    const run = async (client: any) => {
+    const run = async (client: Prisma.TransactionClient) => {
       // Create the allocation
       const allocation = await client.courseAllocation.create({
         data: {
-          courseId: dto.courseId,
+          batchCourseAssignmentId: batchCourseAssignment.id,
           facultyId: dto.facultyId,
           sectionId: dto.sectionId,
-          semesterNumber: semesterNumber,
           academicSessionId,
           status: ALLOCATION_STATUS.ACTIVE,
         },
         include: {
-          course: {
+          batchCourseAssignment: {
             select: {
               id: true,
-              code: true,
-              name: true,
-              creditHours: true,
+              course: {
+                select: {
+                  id: true,
+                  code: true,
+                  name: true,
+                  creditHours: true,
+                },
+              },
             },
           },
           faculty: {
@@ -170,7 +174,7 @@ export class AllocationsService {
       const studentRecords = await client.studentAcademicRecord.findMany({
         where: {
           sectionId: dto.sectionId,
-          semesterNumber: semesterNumber,
+          semesterId: batchCourseAssignment.semesterId,
           academicSessionId: academicSessionId,
         },
         select: {
@@ -191,21 +195,21 @@ export class AllocationsService {
           await client.courseEnrollment.create({
             data: {
               studentAcademicRecordId: record.id,
-              courseId: dto.courseId,
               allocationId: allocation.id,
               status: ENROLLMENT_STATUS.ENROLLED,
               isExtra: false,
             },
           });
           enrolledCount++;
-        } catch (err: any) {
+        } catch (err: unknown) {
+          const prismaError = err as { code?: string; message?: string };
           // Skip if already enrolled (P2002 = unique constraint)
-          if (err.code === 'P2002') {
+          if (prismaError.code === 'P2002') {
             skippedCount++;
           } else {
             this.logger.error(
               `Failed to enroll student ${record.student.stdRegNumber}:`,
-              err.message,
+              prismaError.message ?? String(err),
             );
           }
         }
@@ -227,8 +231,9 @@ export class AllocationsService {
         return await run(tx);
       }
       return await this.prisma.$transaction(run);
-    } catch (e: any) {
-      if (e.code === 'P2002') {
+    } catch (e: unknown) {
+      const prismaError = e as { code?: string };
+      if (prismaError.code === 'P2002') {
         throw new ConflictException(
           `${faculty.firstName} ${faculty.lastName} is already assigned to teach ${course.code} in this section`,
         );
@@ -244,13 +249,13 @@ export class AllocationsService {
   async getAssignedCourses(
     batchId: string,
     semesterNumber: number,
-    sectionId?: string,
+    _sectionId?: string,
   ) {
     // Courses are defined per batch + semester and shared across all sections,
     // so there is no per-section filtering anymore.
-    const whereClause: any = {
+    const whereClause: Prisma.BatchCourseAssignmentWhereInput = {
       batchId,
-      semesterNumber,
+      semester: { number: semesterNumber },
     };
 
     const assignments = await this.prisma.batchCourseAssignment.findMany({
@@ -270,7 +275,10 @@ export class AllocationsService {
     });
 
     // Only return active courses and remove duplicates
-    const uniqueCourses = new Map();
+    const uniqueCourses = new Map<
+      string,
+      { id: string; code: string; name: string; creditHours: number; status: string }
+    >();
     assignments
       .filter((a) => a.course.status === 'active')
       .forEach((a) => {
@@ -289,7 +297,9 @@ export class AllocationsService {
     // All-or-nothing: the whole batch shares ONE transaction, so a single
     // failure rolls back every allocation created in this call (#8).
     return this.prisma.$transaction(async (tx) => {
-      const results: any[] = [];
+      const results: Array<
+        Awaited<ReturnType<AllocationsService['create']>>
+      > = [];
       for (const courseId of dto.courseIds) {
         const allocation = await this.create(
           {
@@ -337,14 +347,19 @@ export class AllocationsService {
       }
     }
 
-    const where: any = {
+    const where: Prisma.CourseAllocationWhereInput = {
       status: query.status || ALLOCATION_STATUS.ACTIVE,
     };
     if (sessionFilter) where.academicSessionId = sessionFilter;
 
     if (query.facultyId) where.facultyId = query.facultyId;
     if (query.sectionId) where.sectionId = query.sectionId;
-    if (query.semesterNumber) where.semesterNumber = query.semesterNumber;
+    if (query.semesterNumber) {
+      const semester = await this.prisma.semester.findUnique({
+        where: { number: query.semesterNumber },
+      });
+      if (semester) where.batchCourseAssignment = { semesterId: semester.id };
+    }
 
     // Pagination
     const page = query.page || 1;
@@ -358,14 +373,7 @@ export class AllocationsService {
     const data = await this.prisma.courseAllocation.findMany({
       where,
       include: {
-        course: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-            creditHours: true,
-          },
-        },
+        batchCourseAssignment: { include: { course: true, semester: true } },
         faculty: {
           select: {
             id: true,
@@ -396,9 +404,8 @@ export class AllocationsService {
         },
       },
       orderBy: [
-        { semesterNumber: 'asc' },
+        { batchCourseAssignment: { semester: { number: 'asc' } } },
         { section: { name: 'asc' } },
-        { course: { code: 'asc' } },
       ],
       skip,
       take: limit,
@@ -433,10 +440,14 @@ export class AllocationsService {
     }
 
     // Get courses assigned to this batch/semester
+    const semester = await this.prisma.semester.findUnique({
+      where: { number: semesterNumber },
+    });
+    if (!semester) throw new NotFoundException(`Semester ${semesterNumber} not found`);
     const batchCourses = await this.prisma.batchCourseAssignment.findMany({
       where: {
         batchId: section.batchId,
-        semesterNumber,
+        semesterId: semester.id,
       },
       include: {
         course: true,
@@ -450,7 +461,9 @@ export class AllocationsService {
 
     // Map courses to allocations
     return batchCourses.map((bc) => {
-      const allocation = allocations.find((a) => a.courseId === bc.courseId);
+      const allocation = allocations.find(
+        (a) => a.batchCourseAssignment.courseId === bc.courseId,
+      );
       return {
         course: bc.course,
         isCompulsory: bc.isCompulsory,
@@ -466,7 +479,7 @@ export class AllocationsService {
     const allocation = await this.prisma.courseAllocation.findUnique({
       where: { id },
       include: {
-        course: true,
+        batchCourseAssignment: { include: { course: true, semester: true } },
         faculty: true,
         section: {
           include: {
@@ -501,15 +514,21 @@ export class AllocationsService {
       // (prevents orphaned "enrolled but inactive" rows — #3).
       const affected = await tx.courseEnrollment.findMany({
         where: { allocationId: id, status: ENROLLMENT_STATUS.ENROLLED },
-        select: { id: true, courseId: true },
+        select: {
+          id: true,
+          allocation: {
+            select: { batchCourseAssignment: { select: { courseId: true } } },
+          },
+        },
       });
 
       for (const e of affected) {
+        const courseId = e.allocation.batchCourseAssignment.courseId;
         const otherActive = await tx.courseAllocation.findFirst({
           where: {
             id: { not: id },
             status: ALLOCATION_STATUS.ACTIVE,
-            courseId: e.courseId,
+            batchCourseAssignment: { courseId },
             sectionId: allocation.sectionId,
             academicSessionId: allocation.academicSessionId,
           },

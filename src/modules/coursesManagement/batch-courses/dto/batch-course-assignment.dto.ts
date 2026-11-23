@@ -4,22 +4,20 @@ import {
   IsBoolean,
   IsOptional,
   Min,
-  Max,
   IsArray,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateBatchCourseAssignmentDto {
   @IsUUID()
-  batchId: string;
+  batchId!: string;
 
   @IsUUID()
-  courseId: string;
+  courseId!: string;
 
   @IsInt()
   @Min(1)
-  @Max(8)
-  semesterNumber: number;
+  semesterNumber!: number;
 
   @IsBoolean()
   @IsOptional()
@@ -32,16 +30,15 @@ export class CreateBatchCourseAssignmentDto {
 
 export class BulkAssignCoursesDto {
   @IsUUID()
-  batchId: string;
+  batchId!: string;
 
   @IsInt()
   @Min(1)
-  @Max(8)
-  semesterNumber: number;
+  semesterNumber!: number;
 
   @IsArray()
   @IsUUID('4', { each: true })
-  courseIds: string[];
+  courseIds!: string[];
 
   @IsBoolean()
   @IsOptional()
@@ -60,25 +57,25 @@ export class UpdateBatchCourseAssignmentDto {
 
 export class GetBatchCoursesQueryDto {
   @IsUUID('4')
-  batchId: string;
+  batchId!: string;
 
   @IsOptional()
   @IsInt()
   @Type(() => Number)
   @Min(1)
-  @Max(8)
   semesterNumber?: number;
 }
 
 export class BatchCourseAssignmentResponseDto {
-  id: string;
-  batchId: string;
-  courseId: string;
-  semesterNumber: number;
-  isCompulsory: boolean;
-  displayOrder: number;
-  createdAt: Date;
-  updatedAt: Date | null;
+  id!: string;
+  batchId!: string;
+  courseId!: string;
+  semesterId!: string;
+  semesterNumber!: number;
+  isCompulsory!: boolean;
+  displayOrder!: number;
+  createdAt!: Date;
+  updatedAt!: Date | null;
 
   // Relations
   batch?: {

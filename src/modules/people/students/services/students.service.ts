@@ -33,7 +33,7 @@ const latestRecordSelect = {
   orderBy: { academicSession: { startDate: 'desc' } },
   take: 1,
   select: {
-    semesterNumber: true,
+    semester: { select: { number: true } },
     section: { select: { name: true } },
     academicSession: { select: { name: true } },
   },
@@ -743,7 +743,7 @@ export class StudentsService {
           orderBy: { academicSession: { startDate: 'desc' } },
           take: 1,
           select: {
-            semesterNumber: true,
+            semester: { select: { number: true } },
             section: { select: { name: true } },
           },
         },
@@ -763,7 +763,7 @@ export class StudentsService {
         .filter(Boolean)
         .join(' '),
       profileImageUrl: student.profileImageUrl,
-      currentSemester: record?.semesterNumber ?? null,
+      currentSemester: record?.semester.number ?? null,
       currentSection: record?.section?.name ?? null,
     };
   }
@@ -781,7 +781,7 @@ export class StudentsService {
           take: 1,
           select: {
             id: true,
-            semesterNumber: true,
+            semester: { select: { number: true } },
             academicSessionId: true,
             sectionId: true,
           },
@@ -806,7 +806,7 @@ export class StudentsService {
 
     return {
       studentId: student.id,
-      currentSemester: currentRecord?.semesterNumber ?? null,
+      currentSemester: currentRecord?.semester.number ?? null,
       courses,
       recentAssessments,
       announcements,
@@ -852,14 +852,16 @@ export class StudentsService {
     }
 
     const where: Prisma.StudentMarkWhereInput = {
-      studentId: student.id,
+      courseEnrollment: {
+        studentAcademicRecord: { studentId: student.id },
+      },
       ...(query.courseId || query.category
         ? {
             assessment: {
               ...(query.courseId
                 ? {
                     courseAllocation: {
-                      courseId: query.courseId,
+                      batchCourseAssignment: { courseId: query.courseId },
                     },
                   }
                 : {}),
@@ -882,11 +884,8 @@ export class StudentsService {
           include: {
             courseAllocation: {
               include: {
-                course: {
-                  select: {
-                    code: true,
-                    name: true,
-                  },
+                batchCourseAssignment: {
+                  include: { course: { select: { code: true, name: true } } },
                 },
               },
             },
@@ -904,8 +903,8 @@ export class StudentsService {
         obtained: mark.marksObtained.toNumber(),
       },
       course: {
-        code: mark.assessment.courseAllocation.course.code,
-        name: mark.assessment.courseAllocation.course.name,
+        code: mark.assessment.courseAllocation.batchCourseAssignment.course.code,
+        name: mark.assessment.courseAllocation.batchCourseAssignment.course.name,
       },
     }));
   }
@@ -938,7 +937,7 @@ export class StudentsService {
       email: s.email,
       phone: s.phone,
       batchName: s.batch?.name ?? null,
-      currentSemester: record?.semesterNumber ?? null,
+      currentSemester: record?.semester.number ?? null,
       currentSection: record?.section.name ?? null,
       status: s.status as StudentStatus,
       admissionDate: s.admissionDate,
@@ -985,16 +984,15 @@ export class StudentsService {
         status: 'enrolled',
       },
       select: {
-        course: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-            creditHours: true,
-          },
-        },
         allocation: {
           select: {
+            batchCourseAssignment: {
+              select: {
+                course: {
+                  select: { id: true, code: true, name: true, creditHours: true },
+                },
+              },
+            },
             faculty: {
               select: {
                 firstName: true,
@@ -1011,7 +1009,8 @@ export class StudentsService {
       },
     });
 
-    return enrollments.map(({ course, allocation }) => {
+    return enrollments.map(({ allocation }) => {
+      const course = allocation.batchCourseAssignment.course;
       const faculty = allocation?.faculty;
 
       const facultyName = faculty
@@ -1044,11 +1043,13 @@ export class StudentsService {
         status: 'enrolled',
       },
       select: {
-        course: {
+        allocation: {
           select: {
-            id: true,
-            code: true,
-            name: true,
+            batchCourseAssignment: {
+              select: {
+                course: { select: { id: true, code: true, name: true } },
+              },
+            },
           },
         },
       },
@@ -1057,10 +1058,10 @@ export class StudentsService {
       },
     });
 
-    return enrollments.map(({ course }) => ({
-      id: course.id,
-      code: course.code,
-      name: course.name,
+    return enrollments.map(({ allocation }) => ({
+      id: allocation.batchCourseAssignment.course.id,
+      code: allocation.batchCourseAssignment.course.code,
+      name: allocation.batchCourseAssignment.course.name,
     }));
   }
 }

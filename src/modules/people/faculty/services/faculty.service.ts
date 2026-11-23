@@ -12,9 +12,9 @@ import { UpdateFacultyDto } from '../dto/update-faculty.dto';
 import { QueryFacultyDto } from '../dto/query-faculty.dto';
 import { UpdateFacultyStatusDto } from '../dto/update-faculty-status.dto';
 import { ROLES } from '../../../../common/constants/roles';
+import { Prisma } from '../../../../generated/prisma/client';
 import type {
   FacultyDetail,
-  FacultyListItem,
   PaginatedFaculty,
   TeachingLoad,
 } from '../types/faculty.types';
@@ -151,7 +151,7 @@ export class FacultyService {
       }
 
       console.log('[FacultyService.create] ✅ Success! Returning faculty data');
-      return result as FacultyDetail;
+      return result;
     });
   }
 
@@ -159,7 +159,7 @@ export class FacultyService {
     const { page = 1, limit = 20, search, status, designation } = query;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.FacultyWhereInput = {};
 
     if (status) {
       where.status = status;
@@ -204,7 +204,7 @@ export class FacultyService {
     ]);
 
     return {
-      data: data as FacultyListItem[],
+      data: data,
       meta: {
         page,
         limit,
@@ -251,7 +251,7 @@ export class FacultyService {
       throw new NotFoundException('Faculty profile not found');
     }
 
-    return faculty as FacultyDetail;
+    return faculty;
   }
 
   async update(id: string, dto: UpdateFacultyDto): Promise<FacultyDetail> {
@@ -335,7 +335,7 @@ export class FacultyService {
   ): Promise<TeachingLoad> {
     await this.findOne(id);
 
-    const where: any = {
+    const where: Prisma.CourseAllocationWhereInput = {
       facultyId: id,
       status: 'active',
     };
@@ -347,7 +347,7 @@ export class FacultyService {
     const allocations = await this.prisma.courseAllocation.findMany({
       where,
       include: {
-        course: true,
+        batchCourseAssignment: { include: { course: true, semester: true } },
         section: {
           include: {
             batch: true,
@@ -358,7 +358,7 @@ export class FacultyService {
     });
 
     const totalCreditHours = allocations.reduce(
-      (sum, alloc) => sum + (alloc.course.creditHours || 0),
+      (sum, alloc) => sum + (alloc.batchCourseAssignment.course.creditHours || 0),
       0,
     );
 
@@ -373,7 +373,7 @@ export class FacultyService {
     const allocation = await this.prisma.courseAllocation.findUnique({
       where: { id: allocationId },
       include: {
-        course: true,
+        batchCourseAssignment: { include: { course: true, semester: true } },
         section: {
           include: {
             batch: true,
@@ -403,20 +403,8 @@ export class FacultyService {
     const studentCount = await this.prisma.courseEnrollment.count({
       where: {
         OR: [
-          // Regular students from this section
-          {
-            courseId: allocation.courseId,
-            studentAcademicRecord: {
-              sectionId: allocation.sectionId,
-              semesterNumber: allocation.semesterNumber,
-              academicSessionId: allocation.academicSessionId,
-            },
-          },
-          // Extra course students explicitly assigned to this allocation
-          {
-            allocationId: allocationId,
-            isExtra: true,
-          },
+          { allocationId, isExtra: false },
+          { allocationId, isExtra: true },
         ],
         status: 'enrolled',
       },
@@ -444,20 +432,8 @@ export class FacultyService {
     const enrollments = await this.prisma.courseEnrollment.findMany({
       where: {
         OR: [
-          // Regular students from this section
-          {
-            courseId: allocation.courseId,
-            studentAcademicRecord: {
-              sectionId: allocation.sectionId,
-              semesterNumber: allocation.semesterNumber,
-              academicSessionId: allocation.academicSessionId,
-            },
-          },
-          // Extra course students explicitly assigned to this allocation
-          {
-            allocationId: allocationId,
-            isExtra: true,
-          },
+          { allocationId, isExtra: false },
+          { allocationId, isExtra: true },
         ],
         status: 'enrolled',
       },

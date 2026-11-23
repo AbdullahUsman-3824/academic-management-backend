@@ -1,14 +1,22 @@
-import { IsString, IsUUID, IsNumber, IsOptional, IsArray, ValidateNested, Min, Max } from 'class-validator';
+import {
+  IsString,
+  IsUUID,
+  IsNumber,
+  IsOptional,
+  IsArray,
+  ValidateNested,
+  Min,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class MarkEntryDto {
   @IsUUID()
-  studentId: string;
+  studentId!: string;
 
   @IsNumber()
   @Type(() => Number)
   @Min(0)
-  marksObtained: number;
+  marksObtained!: number;
 
   @IsOptional()
   @IsString()
@@ -17,19 +25,19 @@ export class MarkEntryDto {
 
 export class BulkMarkEntryDto {
   @IsUUID()
-  assessmentId: string;
+  assessmentId!: string;
 
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => MarkEntryDto)
-  marks: MarkEntryDto[];
+  marks!: MarkEntryDto[];
 }
 
 export class UpdateStudentMarkDto {
   @IsNumber()
   @Type(() => Number)
   @Min(0)
-  marksObtained: number;
+  marksObtained!: number;
 
   @IsOptional()
   @IsString()
