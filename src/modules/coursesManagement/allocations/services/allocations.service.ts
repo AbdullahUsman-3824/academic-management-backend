@@ -15,8 +15,10 @@ import {
 import {
   ACADEMIC_SESSION_STATUS,
   ALLOCATION_STATUS,
+  COURSE_STATUS,
   ENROLLMENT_STATUS,
 } from '../../../../common/constants/status.constants';
+import { EnrollmentsService } from '../../enrollments/services/enrollments.service';
 
 /**
  * #9 Workload guard: max ACTIVE course allocations one faculty may hold in a
@@ -32,7 +34,10 @@ const MAX_ALLOCATIONS_PER_FACULTY_PER_SESSION = Number(
 export class AllocationsService {
   private readonly logger = new Logger(AllocationsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly enrollmentsService: EnrollmentsService,
+  ) {}
 
   /**
    * Create a single course allocation
@@ -66,20 +71,6 @@ export class AllocationsService {
     }
     const academicSessionId = activeSession.id;
 
-    // #9 Workload guard: cap active allocations per faculty per session.
-    const activeLoad = await db.courseAllocation.count({
-      where: {
-        facultyId: dto.facultyId,
-        academicSessionId,
-        status: ALLOCATION_STATUS.ACTIVE,
-      },
-    });
-    if (activeLoad >= MAX_ALLOCATIONS_PER_FACULTY_PER_SESSION) {
-      throw new BadRequestException(
-        `${faculty.firstName} ${faculty.lastName} already holds the maximum of ${MAX_ALLOCATIONS_PER_FACULTY_PER_SESSION} active course allocations for this session.`,
-      );
-    }
-
     // Auto-detect semester from section's current academic records
     const sectionRecord = await db.studentAcademicRecord.findFirst({
       where: {
@@ -99,14 +90,13 @@ export class AllocationsService {
     const semesterNumber = sectionRecord.semester.number;
 
     // Validate course is assigned to this batch/semester
-    const batchCourseAssignment =
-      await db.batchCourseAssignment.findFirst({
-        where: {
-          batchId: section.batchId,
-          courseId: dto.courseId,
-          semester: { number: semesterNumber },
-        },
-      });
+    const batchCourseAssignment = await db.batchCourseAssignment.findFirst({
+      where: {
+        batchId: section.batchId,
+        courseId: dto.courseId,
+        semester: { number: semesterNumber },
+      },
+    });
 
     if (!batchCourseAssignment) {
       throw new BadRequestException(
@@ -116,6 +106,20 @@ export class AllocationsService {
 
     // The transactional body, runnable either inside an existing tx or a new one.
     const run = async (client: Prisma.TransactionClient) => {
+      // Check the workload in the same transaction as the allocation write.
+      const activeLoad = await client.courseAllocation.count({
+        where: {
+          facultyId: dto.facultyId,
+          academicSessionId,
+          status: ALLOCATION_STATUS.ACTIVE,
+        },
+      });
+      if (activeLoad >= MAX_ALLOCATIONS_PER_FACULTY_PER_SESSION) {
+        throw new BadRequestException(
+          `${faculty.firstName} ${faculty.lastName} already holds the maximum of ${MAX_ALLOCATIONS_PER_FACULTY_PER_SESSION} active course allocations for this session.`,
+        );
+      }
+
       // Create the allocation
       const allocation = await client.courseAllocation.create({
         data: {
@@ -176,6 +180,7 @@ export class AllocationsService {
           sectionId: dto.sectionId,
           semesterId: batchCourseAssignment.semesterId,
           academicSessionId: academicSessionId,
+          courseRegistrationFinalizedAt: null,
         },
         select: {
           id: true,
@@ -191,6 +196,19 @@ export class AllocationsService {
       let skippedCount = 0;
 
       for (const record of studentRecords) {
+        const { credits, maxCredits } =
+          await this.enrollmentsService.getCurrentCreditLoad(client, record.id);
+        if (
+          maxCredits != null &&
+          credits + course.creditHours > maxCredits
+        ) {
+          skippedCount++;
+          this.logger.warn(
+            `[AUTO-ENROLL] Skipped ${record.student.stdRegNumber}: ${course.code} would exceed the semester credit limit.`,
+          );
+          continue;
+        }
+
         try {
           await client.courseEnrollment.create({
             data: {
@@ -230,7 +248,9 @@ export class AllocationsService {
       if (tx) {
         return await run(tx);
       }
-      return await this.prisma.$transaction(run);
+      return await this.prisma.$transaction(run, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      });
     } catch (e: unknown) {
       const prismaError = e as { code?: string };
       if (prismaError.code === 'P2002') {
@@ -277,10 +297,16 @@ export class AllocationsService {
     // Only return active courses and remove duplicates
     const uniqueCourses = new Map<
       string,
-      { id: string; code: string; name: string; creditHours: number; status: string }
+      {
+        id: string;
+        code: string;
+        name: string;
+        creditHours: number;
+        status: string;
+      }
     >();
     assignments
-      .filter((a) => a.course.status === 'active')
+      .filter((a) => a.course.status === COURSE_STATUS.ACTIVE)
       .forEach((a) => {
         if (!uniqueCourses.has(a.course.id)) {
           uniqueCourses.set(a.course.id, a.course);
@@ -296,32 +322,35 @@ export class AllocationsService {
   async bulkCreate(dto: BulkAllocationDto) {
     // All-or-nothing: the whole batch shares ONE transaction, so a single
     // failure rolls back every allocation created in this call (#8).
-    return this.prisma.$transaction(async (tx) => {
-      const results: Array<
-        Awaited<ReturnType<AllocationsService['create']>>
-      > = [];
-      for (const courseId of dto.courseIds) {
-        const allocation = await this.create(
-          {
-            facultyId: dto.facultyId,
-            courseId,
-            sectionId: dto.sectionId,
-          },
-          tx,
-        );
-        results.push(allocation);
-      }
+    return this.prisma.$transaction(
+      async (tx) => {
+        const results: Array<
+          Awaited<ReturnType<AllocationsService['create']>>
+        > = [];
+        for (const courseId of dto.courseIds) {
+          const allocation = await this.create(
+            {
+              facultyId: dto.facultyId,
+              courseId,
+              sectionId: dto.sectionId,
+            },
+            tx,
+          );
+          results.push(allocation);
+        }
 
-      return {
-        success: results,
-        errors: [],
-        summary: {
-          total: dto.courseIds.length,
-          created: results.length,
-          failed: 0,
-        },
-      };
-    });
+        return {
+          success: results,
+          errors: [],
+          summary: {
+            total: dto.courseIds.length,
+            created: results.length,
+            failed: 0,
+          },
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 
   /**
@@ -443,7 +472,8 @@ export class AllocationsService {
     const semester = await this.prisma.semester.findUnique({
       where: { number: semesterNumber },
     });
-    if (!semester) throw new NotFoundException(`Semester ${semesterNumber} not found`);
+    if (!semester)
+      throw new NotFoundException(`Semester ${semesterNumber} not found`);
     const batchCourses = await this.prisma.batchCourseAssignment.findMany({
       where: {
         batchId: section.batchId,

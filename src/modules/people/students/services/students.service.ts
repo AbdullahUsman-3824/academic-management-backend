@@ -15,6 +15,7 @@ import { QueryStudentsDto } from '../dto/query-students.dto';
 import { QueryStudentMarksDto } from '../dto/query-student-marks.dto';
 import { StudentStatus } from '../enums/student-status.enum';
 import { ROLES } from '../../../../common/constants/roles';
+import { ENROLLMENT_STATUS } from '../../../../common/constants/status.constants';
 import type {
   StudentDetail,
   StudentListItem,
@@ -903,8 +904,10 @@ export class StudentsService {
         obtained: mark.marksObtained.toNumber(),
       },
       course: {
-        code: mark.assessment.courseAllocation.batchCourseAssignment.course.code,
-        name: mark.assessment.courseAllocation.batchCourseAssignment.course.name,
+        code: mark.assessment.courseAllocation.batchCourseAssignment.course
+          .code,
+        name: mark.assessment.courseAllocation.batchCourseAssignment.course
+          .name,
       },
     }));
   }
@@ -981,7 +984,7 @@ export class StudentsService {
     const enrollments = await this.prisma.courseEnrollment.findMany({
       where: {
         studentAcademicRecordId,
-        status: 'enrolled',
+        status: ENROLLMENT_STATUS.ENROLLED,
       },
       select: {
         allocation: {
@@ -989,7 +992,12 @@ export class StudentsService {
             batchCourseAssignment: {
               select: {
                 course: {
-                  select: { id: true, code: true, name: true, creditHours: true },
+                  select: {
+                    id: true,
+                    code: true,
+                    name: true,
+                    creditHours: true,
+                  },
                 },
               },
             },
@@ -1040,7 +1048,7 @@ export class StudentsService {
     const enrollments = await this.prisma.courseEnrollment.findMany({
       where: {
         studentAcademicRecordId,
-        status: 'enrolled',
+        status: ENROLLMENT_STATUS.ENROLLED,
       },
       select: {
         allocation: {

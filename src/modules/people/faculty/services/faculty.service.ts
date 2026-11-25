@@ -13,6 +13,10 @@ import { QueryFacultyDto } from '../dto/query-faculty.dto';
 import { UpdateFacultyStatusDto } from '../dto/update-faculty-status.dto';
 import { ROLES } from '../../../../common/constants/roles';
 import { Prisma } from '../../../../generated/prisma/client';
+import {
+  ALLOCATION_STATUS,
+  ENROLLMENT_STATUS,
+} from '../../../../common/constants/status.constants';
 import type {
   FacultyDetail,
   PaginatedFaculty,
@@ -308,7 +312,7 @@ export class FacultyService {
 
     // Check if faculty has any active allocations
     const allocations = await this.prisma.courseAllocation.count({
-      where: { facultyId: id, status: 'active' },
+      where: { facultyId: id, status: ALLOCATION_STATUS.ACTIVE },
     });
 
     if (allocations > 0) {
@@ -337,7 +341,7 @@ export class FacultyService {
 
     const where: Prisma.CourseAllocationWhereInput = {
       facultyId: id,
-      status: 'active',
+      status: ALLOCATION_STATUS.ACTIVE,
     };
 
     if (academicSessionId) {
@@ -358,7 +362,8 @@ export class FacultyService {
     });
 
     const totalCreditHours = allocations.reduce(
-      (sum, alloc) => sum + (alloc.batchCourseAssignment.course.creditHours || 0),
+      (sum, alloc) =>
+        sum + (alloc.batchCourseAssignment.course.creditHours || 0),
       0,
     );
 
@@ -406,7 +411,7 @@ export class FacultyService {
           { allocationId, isExtra: false },
           { allocationId, isExtra: true },
         ],
-        status: 'enrolled',
+        status: ENROLLMENT_STATUS.ENROLLED,
       },
     });
 
@@ -435,7 +440,7 @@ export class FacultyService {
           { allocationId, isExtra: false },
           { allocationId, isExtra: true },
         ],
-        status: 'enrolled',
+        status: ENROLLMENT_STATUS.ENROLLED,
       },
       include: {
         studentAcademicRecord: {

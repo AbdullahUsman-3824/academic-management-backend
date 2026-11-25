@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
 import { Prisma } from '../../../generated/prisma/client';
+import { STUDENT_RECORD_STATUS } from '../../../common/constants/status.constants';
 import {
   CreateSectionDto,
   UpdateSectionDto,
@@ -133,7 +134,7 @@ export class SectionService {
     const where = {
       studentId: { in: dto.studentIds },
       batchId,
-      status: 'ENROLLED' as const,
+      status: STUDENT_RECORD_STATUS.ENROLLED,
     };
 
     const enrolledCount = await this.prisma.studentAcademicRecord.count({
@@ -253,7 +254,7 @@ export class SectionService {
         const studentCount = await client.studentAcademicRecord.count({
           where: {
             sectionId: s.id,
-            status: 'ENROLLED',
+            status: STUDENT_RECORD_STATUS.ENROLLED,
           },
         });
         return { ...s, studentCount };

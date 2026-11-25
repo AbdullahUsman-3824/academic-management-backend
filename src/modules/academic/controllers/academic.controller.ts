@@ -1,8 +1,16 @@
-import { Controller, Post, Get, Body, Param, NotFoundException } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  Param,
+  NotFoundException,
+} from '@nestjs/common';
 import { AcademicService } from '../services/academic.service';
 import { SemesterService } from '../services/semester.service';
 import { AcademicSetupDto } from '../dto/academic-setup.dto';
 import { PrismaService } from '../../../database/prisma.service';
+import { ACADEMIC_SESSION_STATUS } from '../../../common/constants/status.constants';
 
 @Controller('academics')
 export class AcademicController {
@@ -41,7 +49,7 @@ export class AcademicController {
       where: {
         sectionId: id,
         academicSession: {
-          status: 'ACTIVE',
+          status: ACADEMIC_SESSION_STATUS.ACTIVE,
         },
       },
       select: {
@@ -53,9 +61,7 @@ export class AcademicController {
     });
 
     if (!record) {
-      throw new NotFoundException(
-        'No academic records found for this section',
-      );
+      throw new NotFoundException('No academic records found for this section');
     }
 
     return {

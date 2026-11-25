@@ -9,6 +9,11 @@ import { PrismaService } from '../../../database/prisma.service';
 import { SectionService } from './section.service';
 import { EnrollmentsService } from '../../coursesManagement/enrollments/services/enrollments.service';
 import { Prisma } from '../../../generated/prisma/client';
+import {
+  ACADEMIC_SESSION_STATUS,
+  BATCH_STATUS,
+  STUDENT_RECORD_STATUS,
+} from '../../../common/constants/status.constants';
 
 type Db = Prisma.TransactionClient;
 
@@ -61,14 +66,14 @@ export class StudentAcademicRecordService {
       select: { id: true, status: true },
     });
     if (!batch) throw new NotFoundException('Batch not found');
-    if (batch.status !== 'ACTIVE') {
+    if (batch.status !== BATCH_STATUS.ACTIVE) {
       throw new BadRequestException('Batch is not active');
     }
 
     // ── Resolve Academic Session ───────────────
     if (!academicSessionId) {
       const activeSession = await client.academicSession.findFirst({
-        where: { status: 'ACTIVE' },
+        where: { status: ACADEMIC_SESSION_STATUS.ACTIVE },
         select: { id: true },
         orderBy: { startDate: 'desc' },
       });
@@ -132,7 +137,7 @@ export class StudentAcademicRecordService {
           academicSessionId,
           semesterId: semester.id,
           sectionId: suggested.id,
-          status: 'ENROLLED',
+          status: STUDENT_RECORD_STATUS.ENROLLED,
         },
         include: {
           section: {
@@ -167,18 +172,21 @@ export class StudentAcademicRecordService {
         this.logger.log(
           `[AUTO-ENROLL] Starting for student ${studentId}, batch ${batchId}, semester ${semesterNumber}`,
         );
-        enrollmentResult = await this.enrollmentsService.autoEnrollInBatchCourses(
-          record.id,
-          batchId,
-          semesterNumber,
-          client,
-        );
+        enrollmentResult =
+          await this.enrollmentsService.autoEnrollInBatchCourses(
+            record.id,
+            batchId,
+            semesterNumber,
+            client,
+          );
         this.logger.log(
           `[AUTO-ENROLL] Complete: ${enrollmentResult.created.length} courses enrolled, ${enrollmentResult.skipped} skipped, ${enrollmentResult.errors.length} errors`,
         );
       } catch (enrollError: unknown) {
         const message =
-          enrollError instanceof Error ? enrollError.message : String(enrollError);
+          enrollError instanceof Error
+            ? enrollError.message
+            : String(enrollError);
         this.logger.error('[AUTO-ENROLL] Failed:', message);
         // Don't fail the student creation if enrollment fails
         enrollmentResult.errors.push({

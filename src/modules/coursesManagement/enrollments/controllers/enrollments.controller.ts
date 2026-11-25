@@ -74,7 +74,8 @@ export class EnrollmentsController {
   @Get('available-allocations/:courseId')
   // @Permissions('enrollments:read')
   async getAvailableAllocations(@Param('courseId') courseId: string) {
-    const data = await this.enrollmentsService.getAvailableAllocations(courseId);
+    const data =
+      await this.enrollmentsService.getAvailableAllocations(courseId);
     return { success: true, data };
   }
 
@@ -84,14 +85,31 @@ export class EnrollmentsController {
     @Param('studentId') studentId: string,
     @Query('academicSessionId') academicSessionId?: string,
   ) {
-    const data = await this.enrollmentsService.findByStudent(studentId, academicSessionId);
+    const data = await this.enrollmentsService.findByStudent(
+      studentId,
+      academicSessionId,
+    );
     return { success: true, data };
   }
 
   @Get('stats/:studentAcademicRecordId')
   // @Permissions('enrollments:read')
-  async getStats(@Param('studentAcademicRecordId') studentAcademicRecordId: string) {
-    const data = await this.enrollmentsService.getEnrollmentStats(studentAcademicRecordId);
+  async getStats(
+    @Param('studentAcademicRecordId') studentAcademicRecordId: string,
+  ) {
+    const data = await this.enrollmentsService.getEnrollmentStats(
+      studentAcademicRecordId,
+    );
+    return { success: true, data };
+  }
+
+  @Post('records/:studentAcademicRecordId/finalize')
+  async finalizeRegistration(
+    @Param('studentAcademicRecordId') studentAcademicRecordId: string,
+  ) {
+    const data = await this.enrollmentsService.finalizeRegistration(
+      studentAcademicRecordId,
+    );
     return { success: true, data };
   }
 
@@ -108,7 +126,10 @@ export class EnrollmentsController {
     @Param('id') id: string,
     @Body() updateStatusDto: UpdateEnrollmentStatusDto,
   ) {
-    const data = await this.enrollmentsService.updateStatus(id, updateStatusDto);
+    const data = await this.enrollmentsService.updateStatus(
+      id,
+      updateStatusDto,
+    );
     return { success: true, data };
   }
 

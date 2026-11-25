@@ -62,11 +62,13 @@ src/modules/
 ### Key Concepts
 
 1. **Academic Structure Hierarchy**:
+
    ```
    AcademicYear → AcademicSession → Batch → Section → StudentAcademicRecord
    ```
 
 2. **Course Assignment Flow**:
+
    ```
    Course (catalog) → SemesterCourse (template) → BatchCourseAssignment → Allocation (faculty) → Enrollment (student)
    ```
@@ -83,6 +85,7 @@ src/modules/
 All protected routes require JWT authentication via the `Authorization` header.
 
 **Header Format**:
+
 ```
 Authorization: Bearer <jwt_token>
 ```
@@ -100,6 +103,7 @@ Content-Type: application/json
 ```
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -160,6 +164,7 @@ Authorization: Bearer <token>
 ```
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -181,16 +186,19 @@ Authorization: Bearer <token>
 ### 3. Academic Sessions
 
 #### List Sessions
+
 ```http
 GET /api/academics/sessions?status=ACTIVE&academicYearId=uuid
 ```
 
 #### Get Session Details
+
 ```http
 GET /api/academics/sessions/:id
 ```
 
 #### Update Session
+
 ```http
 PATCH /api/academics/sessions/:id
 Content-Type: application/json
@@ -202,11 +210,13 @@ Content-Type: application/json
 ```
 
 #### Activate Session
+
 ```http
 POST /api/academics/sessions/:id/activate
 ```
 
 #### Complete Session
+
 ```http
 POST /api/academics/sessions/:id/complete
 ```
@@ -214,16 +224,19 @@ POST /api/academics/sessions/:id/complete
 ### 4. Batches
 
 #### List Batches
+
 ```http
 GET /api/academics/batches?status=ACTIVE
 ```
 
 #### Get Batch Details
+
 ```http
 GET /api/academics/batches/:id
 ```
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -241,6 +254,7 @@ GET /api/academics/batches/:id
 ```
 
 #### Update Batch
+
 ```http
 PATCH /api/academics/batches/:id
 Content-Type: application/json
@@ -257,6 +271,7 @@ Content-Type: application/json
 ### 1. Course Catalog
 
 #### Create Course
+
 ```http
 POST /api/courses
 Content-Type: application/json
@@ -272,11 +287,13 @@ Content-Type: application/json
 ```
 
 #### List Courses
+
 ```http
 GET /api/courses?status=ACTIVE&type=CORE&search=law&page=1&limit=10
 ```
 
 **Query Parameters**:
+
 - `status`: ACTIVE | DRAFT | ARCHIVED
 - `type`: CORE | ELECTIVE | MANDATORY
 - `search`: Text search in code/name
@@ -284,6 +301,7 @@ GET /api/courses?status=ACTIVE&type=CORE&search=law&page=1&limit=10
 - `limit`: Results per page (default: 10)
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -307,11 +325,13 @@ GET /api/courses?status=ACTIVE&type=CORE&search=law&page=1&limit=10
 ```
 
 #### Get Course Details
+
 ```http
 GET /api/courses/:id
 ```
 
 #### Update Course
+
 ```http
 PATCH /api/courses/:id
 Content-Type: application/json
@@ -323,6 +343,7 @@ Content-Type: application/json
 ```
 
 #### Update Course Status
+
 ```http
 PATCH /api/courses/:id/status
 Content-Type: application/json
@@ -333,6 +354,7 @@ Content-Type: application/json
 ```
 
 #### Delete Course
+
 ```http
 DELETE /api/courses/:id
 ```
@@ -342,6 +364,7 @@ DELETE /api/courses/:id
 Semester courses define which courses are offered in each semester across all batches.
 
 #### Create Semester Course
+
 ```http
 POST /api/semester-courses
 Content-Type: application/json
@@ -354,6 +377,7 @@ Content-Type: application/json
 ```
 
 #### Bulk Create Semester Courses
+
 ```http
 POST /api/semester-courses/bulk
 Content-Type: application/json
@@ -368,16 +392,19 @@ Content-Type: application/json
 ```
 
 #### Get Courses by Semester
+
 ```http
 GET /api/semester-courses/semester/:semesterId
 ```
 
 #### Get Courses by Semester Number
+
 ```http
 GET /api/semester-courses/semester-number/:number
 ```
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -398,6 +425,7 @@ GET /api/semester-courses/semester-number/:number
 ```
 
 #### Delete Semester Course
+
 ```http
 DELETE /api/semester-courses/:id
 ```
@@ -407,6 +435,7 @@ DELETE /api/semester-courses/:id
 Assign specific courses to a batch for a semester (can differ from template).
 
 #### Assign Single Course
+
 ```http
 POST /api/batch-course-assignments
 Content-Type: application/json
@@ -421,6 +450,7 @@ Content-Type: application/json
 ```
 
 #### Bulk Assign Courses
+
 ```http
 POST /api/batch-course-assignments/bulk
 Content-Type: application/json
@@ -437,6 +467,7 @@ Content-Type: application/json
 ```
 
 #### Copy from Template
+
 Copy courses from semester template to a specific batch.
 
 ```http
@@ -451,6 +482,7 @@ Content-Type: application/json
 ```
 
 **Response**:
+
 ```json
 {
   "count": 8,
@@ -459,21 +491,25 @@ Content-Type: application/json
 ```
 
 #### Preview Template Copy
+
 ```http
 GET /api/batch-course-assignments/preview-template/:batchId?semesterNumber=1&sectionId=uuid
 ```
 
 #### Get Batch Courses
+
 ```http
 GET /api/batch-course-assignments?batchId=uuid&semesterNumber=1&sectionId=uuid
 ```
 
 #### Get Single Assignment
+
 ```http
 GET /api/batch-course-assignments/:id
 ```
 
 #### Update Assignment
+
 ```http
 PATCH /api/batch-course-assignments/:id
 Content-Type: application/json
@@ -484,11 +520,13 @@ Content-Type: application/json
 ```
 
 #### Remove Assignment
+
 ```http
 DELETE /api/batch-course-assignments/:id
 ```
 
 #### Remove All for Batch/Semester
+
 ```http
 DELETE /api/batch-course-assignments?batchId=uuid&semesterNumber=1
 ```
@@ -500,6 +538,7 @@ DELETE /api/batch-course-assignments?batchId=uuid&semesterNumber=1
 Allocations assign faculty to teach specific courses in specific sections.
 
 ### Create Allocation
+
 ```http
 POST /api/allocations
 Authorization: Bearer <token>
@@ -515,6 +554,7 @@ Content-Type: application/json
 ```
 
 ### Bulk Create Allocations
+
 ```http
 POST /api/allocations/bulk
 Content-Type: application/json
@@ -539,6 +579,7 @@ Content-Type: application/json
 ```
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -552,11 +593,13 @@ Content-Type: application/json
 ```
 
 ### List Allocations
+
 ```http
 GET /api/allocations?facultyId=uuid&sectionId=uuid&academicSessionId=uuid&page=1&limit=10
 ```
 
 **Query Parameters**:
+
 - `facultyId`: Filter by faculty
 - `sectionId`: Filter by section
 - `academicSessionId`: Filter by session
@@ -565,6 +608,7 @@ GET /api/allocations?facultyId=uuid&sectionId=uuid&academicSessionId=uuid&page=1
 - `page`, `limit`: Pagination
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -605,11 +649,13 @@ GET /api/allocations?facultyId=uuid&sectionId=uuid&academicSessionId=uuid&page=1
 ```
 
 ### Get Allocation Details
+
 ```http
 GET /api/allocations/:id
 ```
 
 ### Get Allocated Courses for Section/Semester
+
 ```http
 GET /api/allocations/assigned-courses/:batchId/:semesterNumber?sectionId=uuid
 ```
@@ -617,11 +663,13 @@ GET /api/allocations/assigned-courses/:batchId/:semesterNumber?sectionId=uuid
 This returns courses with their faculty assignments.
 
 ### Get Allocations by Section and Semester
+
 ```http
 GET /api/allocations/section/:sectionId/semester/:semesterNumber
 ```
 
 ### Delete Allocation
+
 ```http
 DELETE /api/allocations/:id
 ```
@@ -633,6 +681,7 @@ DELETE /api/allocations/:id
 Enrollments link students to courses via allocations.
 
 ### Create Enrollment
+
 ```http
 POST /api/enrollments
 Authorization: Bearer <token>
@@ -640,22 +689,41 @@ Content-Type: application/json
 
 {
   "studentAcademicRecordId": "uuid",
+  "courseId": "uuid",
   "allocationId": "uuid"
 }
 ```
 
 ### Bulk Enroll Students
+
+Bulk enrollment is all-or-nothing: a failed course rolls back the full request.
+For `isExtra: true`, include one `allocationIds` value per `courseIds` entry,
+in the same order. For regular enrollments, active allocations are resolved from
+the student's section, semester, and session.
+
 ```http
 POST /api/enrollments/bulk
 Content-Type: application/json
 
 {
-  "studentAcademicRecordIds": ["uuid1", "uuid2", "uuid3"],
-  "allocationId": "uuid"
+  "studentAcademicRecordId": "uuid",
+  "courseIds": ["uuid1", "uuid2", "uuid3"],
+  "isExtra": false
 }
 ```
 
+### Finalize Course Registration
+
+Finalization requires the student's active course load to meet the semester's
+minimum credit hours. Once finalized, additional enrollments and drops are
+rejected.
+
+```http
+POST /api/enrollments/records/:studentAcademicRecordId/finalize
+```
+
 ### Bulk Re-Enroll (Auto-enrollment for next semester)
+
 ```http
 POST /api/enrollments/bulk-re-enroll
 Content-Type: application/json
@@ -668,6 +736,7 @@ Content-Type: application/json
 ```
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -682,18 +751,22 @@ Content-Type: application/json
 ```
 
 ### List Enrollments
+
 ```http
-GET /api/enrollments?studentId=uuid&allocationId=uuid&status=ENROLLED&page=1&limit=10
+GET /api/enrollments?studentId=uuid&status=enrolled&academicSessionId=uuid&page=1&limit=10
 ```
 
 **Query Parameters**:
+
 - `studentId`: Filter by student
-- `allocationId`: Filter by allocation
 - `studentAcademicRecordId`: Filter by academic record
-- `status`: ENROLLED | DROPPED | COMPLETED
+- `status`: enrolled | dropped | completed | failed | reappear
+- `academicSessionId`: Filter by a specific academic session; defaults to the active session
+- `allSessions=true`: Include enrollments from all academic sessions
 - `page`, `limit`: Pagination
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -735,16 +808,19 @@ GET /api/enrollments?studentId=uuid&allocationId=uuid&status=ENROLLED&page=1&lim
 ```
 
 ### Get Enrollment Details
+
 ```http
 GET /api/enrollments/:id
 ```
 
 ### Get Student Enrollments
+
 ```http
 GET /api/enrollments/student/:studentId?academicSessionId=uuid
 ```
 
 ### Get Available Allocations for Course
+
 ```http
 GET /api/enrollments/available-allocations/:courseId
 ```
@@ -752,11 +828,13 @@ GET /api/enrollments/available-allocations/:courseId
 Returns allocations where students can still enroll.
 
 ### Get Enrollment Stats
+
 ```http
 GET /api/enrollments/stats/:studentAcademicRecordId
 ```
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -773,6 +851,7 @@ GET /api/enrollments/stats/:studentAcademicRecordId
 ```
 
 ### Update Enrollment Status
+
 ```http
 PATCH /api/enrollments/:id/status
 Content-Type: application/json
@@ -783,11 +862,13 @@ Content-Type: application/json
 ```
 
 ### Drop Enrollment
+
 ```http
 PATCH /api/enrollments/:id/drop
 ```
 
 ### Delete Enrollment
+
 ```http
 DELETE /api/enrollments/:id
 ```
@@ -797,12 +878,14 @@ DELETE /api/enrollments/:id
 ## Faculty APIs
 
 ### Get My Profile (Faculty)
+
 ```http
 GET /api/faculty/me
 Authorization: Bearer <token>
 ```
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -822,12 +905,14 @@ Authorization: Bearer <token>
 ```
 
 ### Get My Teaching Load
+
 ```http
 GET /api/faculty/me/teaching-load?academicSessionId=uuid
 Authorization: Bearer <token>
 ```
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -837,7 +922,11 @@ Authorization: Bearer <token>
     "allocations": [
       {
         "id": "uuid",
-        "course": { "code": "LAW101", "name": "Introduction to Law", "credits": 4 },
+        "course": {
+          "code": "LAW101",
+          "name": "Introduction to Law",
+          "credits": 4
+        },
         "section": { "name": "Section A", "batch": { "name": "Batch 2026" } },
         "semesterNumber": 1,
         "enrolledStudents": 58
@@ -854,12 +943,14 @@ Authorization: Bearer <token>
 ```
 
 ### Get My Allocation Details
+
 ```http
 GET /api/faculty/me/allocations/:allocationId
 Authorization: Bearer <token>
 ```
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -891,12 +982,14 @@ Authorization: Bearer <token>
 ```
 
 ### Get Students in My Allocation
+
 ```http
 GET /api/faculty/me/allocations/:allocationId/students
 Authorization: Bearer <token>
 ```
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -918,6 +1011,7 @@ Authorization: Bearer <token>
 ```
 
 ### Create Faculty (Admin)
+
 ```http
 POST /api/faculty
 Authorization: Bearer <token>
@@ -937,16 +1031,19 @@ Content-Type: application/json
 ```
 
 ### List Faculty
+
 ```http
 GET /api/faculty?status=ACTIVE&department=Law&search=john&page=1&limit=10
 ```
 
 ### Get Faculty Details
+
 ```http
 GET /api/faculty/:id
 ```
 
 ### Update Faculty
+
 ```http
 PATCH /api/faculty/:id
 Content-Type: application/json
@@ -958,6 +1055,7 @@ Content-Type: application/json
 ```
 
 ### Update Faculty Status
+
 ```http
 PATCH /api/faculty/:id/status
 Content-Type: application/json
@@ -968,6 +1066,7 @@ Content-Type: application/json
 ```
 
 ### Delete Faculty
+
 ```http
 DELETE /api/faculty/:id
 ```
@@ -977,6 +1076,7 @@ DELETE /api/faculty/:id
 ## Student APIs
 
 ### Create Student
+
 ```http
 POST /api/students
 Content-Type: application/json
@@ -996,11 +1096,13 @@ Content-Type: application/json
 ```
 
 ### List Students
+
 ```http
 GET /api/students?batchId=uuid&sectionId=uuid&status=ACTIVE&search=jane&page=1&limit=10
 ```
 
 **Query Parameters**:
+
 - `batchId`: Filter by batch
 - `sectionId`: Filter by section
 - `status`: ACTIVE | GRADUATED | DROPPED | SUSPENDED
@@ -1008,6 +1110,7 @@ GET /api/students?batchId=uuid&sectionId=uuid&status=ACTIVE&search=jane&page=1&l
 - `page`, `limit`: Pagination
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -1041,11 +1144,13 @@ GET /api/students?batchId=uuid&sectionId=uuid&status=ACTIVE&search=jane&page=1&l
 ```
 
 ### Get Student Details
+
 ```http
 GET /api/students/:id
 ```
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -1087,6 +1192,7 @@ GET /api/students/:id
 ```
 
 ### Update Student
+
 ```http
 PATCH /api/students/:id
 Content-Type: application/json
@@ -1098,6 +1204,7 @@ Content-Type: application/json
 ```
 
 ### Update Student Status
+
 ```http
 PATCH /api/students/:id/status
 Content-Type: application/json
@@ -1108,6 +1215,7 @@ Content-Type: application/json
 ```
 
 ### Bulk Student Enrollment
+
 ```http
 POST /api/students/bulk
 Content-Type: multipart/form-data
@@ -1117,6 +1225,7 @@ dryRun: true  // Optional: preview without saving
 ```
 
 **Excel Format** (columns):
+
 - rollNumber
 - firstName
 - lastName
@@ -1128,6 +1237,7 @@ dryRun: true  // Optional: preview without saving
 - sectionId
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -1145,6 +1255,7 @@ dryRun: true  // Optional: preview without saving
 ```
 
 ### Download Bulk Template
+
 ```http
 GET /api/students/bulk/template
 ```
@@ -1156,12 +1267,14 @@ Returns an Excel template file.
 ## Assessment APIs
 
 ### Get Assessment Categories
+
 ```http
 GET /api/faculty/assessments/categories
 Authorization: Bearer <token>
 ```
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -1192,12 +1305,14 @@ Authorization: Bearer <token>
 ```
 
 ### Get Assessments by Allocation
+
 ```http
 GET /api/faculty/assessments/allocation/:allocationId
 Authorization: Bearer <token>
 ```
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -1222,6 +1337,7 @@ Authorization: Bearer <token>
 ```
 
 ### Create Assessment
+
 ```http
 POST /api/faculty/assessments
 Authorization: Bearer <token>
@@ -1238,6 +1354,7 @@ Content-Type: application/json
 ```
 
 ### Update Assessment
+
 ```http
 PUT /api/faculty/assessments/:id
 Authorization: Bearer <token>
@@ -1250,18 +1367,21 @@ Content-Type: application/json
 ```
 
 ### Delete Assessment
+
 ```http
 DELETE /api/faculty/assessments/:id
 Authorization: Bearer <token>
 ```
 
 ### Get Assessment Details with Marks
+
 ```http
 GET /api/faculty/assessments/:id/details
 Authorization: Bearer <token>
 ```
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -1298,6 +1418,7 @@ Authorization: Bearer <token>
 ```
 
 ### Bulk Mark Entry
+
 ```http
 POST /api/faculty/assessments/marks/bulk
 Authorization: Bearer <token>
@@ -1323,6 +1444,7 @@ Content-Type: application/json
 ```
 
 ### Update Single Student Mark
+
 ```http
 PUT /api/faculty/assessments/:assessmentId/marks/:studentId
 Authorization: Bearer <token>
@@ -1336,6 +1458,7 @@ Content-Type: application/json
 ```
 
 ### Submit Assessment (Lock it)
+
 ```http
 POST /api/faculty/assessments/:id/submit
 Authorization: Bearer <token>
@@ -1368,7 +1491,7 @@ model AcademicSession {
   startDate       DateTime
   endDate         DateTime
   status          AcademicSessionStatus
-  
+
   academicYear    AcademicYear  @relation(...)
   allocations     Allocation[]
   records         StudentAcademicRecord[]
@@ -1381,7 +1504,7 @@ model Batch {
   admissionYear   Int
   graduationYear  Int
   status          BatchStatus
-  
+
   program         Program
   sections        Section[]
   batchCourses    BatchCourseAssignment[]
@@ -1392,7 +1515,7 @@ model Section {
   name      String
   batchId   String
   capacity  Int
-  
+
   batch       Batch
   allocations Allocation[]
   students    Student[]
@@ -1406,7 +1529,7 @@ model StudentAcademicRecord {
   academicSessionId   String
   semesterNumber      Int
   status              RecordStatus
-  
+
   student            Student
   section            Section
   academicSession    AcademicSession
@@ -1425,7 +1548,7 @@ model Course {
   type        CourseType  // CORE, ELECTIVE, MANDATORY
   description String?
   status      CourseStatus
-  
+
   semesterCourses    SemesterCourse[]
   batchCourses       BatchCourseAssignment[]
   allocations        Allocation[]
@@ -1436,7 +1559,7 @@ model SemesterCourse {
   semesterId  String
   courseId    String
   isElective  Boolean   @default(false)
-  
+
   semester    Semester
   course      Course
 }
@@ -1448,7 +1571,7 @@ model BatchCourseAssignment {
   semesterNumber  Int
   sectionId       String?   // Optional: section-specific
   isElective      Boolean   @default(false)
-  
+
   batch       Batch
   course      Course
   section     Section?
@@ -1461,7 +1584,7 @@ model Allocation {
   sectionId           String
   academicSessionId   String
   semesterNumber      Int
-  
+
   faculty           Faculty
   course            Course
   section           Section
@@ -1476,7 +1599,7 @@ model Enrollment {
   allocationId              String
   status                    EnrollmentStatus
   enrolledAt                DateTime  @default(now())
-  
+
   studentAcademicRecord   StudentAcademicRecord
   allocation              Allocation
 }
@@ -1491,7 +1614,7 @@ model AssessmentCategory {
   description String?
   weightage   Decimal
   isActive    Boolean   @default(true)
-  
+
   assessments Assessment[]
 }
 
@@ -1505,7 +1628,7 @@ model Assessment {
   description   String?
   isSubmitted   Boolean   @default(false)
   submittedAt   DateTime?
-  
+
   allocation    Allocation
   category      AssessmentCategory
   studentMarks  StudentMark[]
@@ -1518,7 +1641,7 @@ model StudentMark {
   marksObtained  Decimal?
   isAbsent       Boolean   @default(false)
   remarks        String?
-  
+
   assessment    Assessment
   student       Student
 }
@@ -1723,7 +1846,7 @@ All APIs return errors in this format:
 
 1. **Oct 16**: Added course allocation APIs and batch course assignments
 2. **Oct 17**: Refactored student listing with improved data structure
-3. **Oct 18**: 
+3. **Oct 18**:
    - Fixed enrollment allocation relationship
    - Added faculty portal endpoints
    - Improved student listing for teachers

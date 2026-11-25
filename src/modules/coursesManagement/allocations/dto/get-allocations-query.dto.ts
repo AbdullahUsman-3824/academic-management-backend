@@ -1,5 +1,14 @@
-import { IsUUID, IsOptional, IsString, IsInt, IsBoolean, Min, Max } from 'class-validator';
+import {
+  IsUUID,
+  IsOptional,
+  IsInt,
+  IsBoolean,
+  IsEnum,
+  Min,
+  Max,
+} from 'class-validator';
 import { Type, Transform } from 'class-transformer';
+import { CourseAllocationStatus } from '../../../../generated/prisma/enums';
 
 export class GetAllocationsQueryDto {
   @IsUUID('4')
@@ -28,9 +37,9 @@ export class GetAllocationsQueryDto {
   @Transform(({ value }) => value === true || value === 'true' || value === '1')
   allSessions?: boolean;
 
-  @IsString()
+  @IsEnum(CourseAllocationStatus)
   @IsOptional()
-  status?: string;
+  status?: CourseAllocationStatus;
 
   @IsOptional()
   @IsInt()

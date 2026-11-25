@@ -5,6 +5,19 @@ enum CourseAllocationType {
   RETAKE
 }
 
+enum CourseAllocationStatus {
+  active
+  inactive
+}
+
+enum CourseEnrollmentStatus {
+  enrolled
+  dropped
+  completed
+  failed
+  reappear
+}
+
 // Global course catalog
 model Course {
   id          String    @id @default(uuid()) @db.Uuid
@@ -44,15 +57,15 @@ model BatchCourseAssignment {
 
 // An actual offering: curriculum course + section + session + type, taught by one teacher
 model CourseAllocation {
-  id                      String               @id @default(uuid()) @db.Uuid
-  batchCourseAssignmentId String               @map("batch_course_assignment_id") @db.Uuid
-  facultyId               String               @map("faculty_id") @db.Uuid
-  sectionId               String               @map("section_id") @db.Uuid
-  academicSessionId       String               @map("academic_session_id") @db.Uuid
-  type                    CourseAllocationType @default(REGULAR)
-  status                  String               @default("active")
-  createdAt               DateTime             @default(now()) @map("created_at")
-  updatedAt               DateTime?            @updatedAt @map("updated_at")
+  id                      String                 @id @default(uuid()) @db.Uuid
+  batchCourseAssignmentId String                 @map("batch_course_assignment_id") @db.Uuid
+  facultyId               String                 @map("faculty_id") @db.Uuid
+  sectionId               String                 @map("section_id") @db.Uuid
+  academicSessionId       String                 @map("academic_session_id") @db.Uuid
+  type                    CourseAllocationType   @default(REGULAR)
+  status                  CourseAllocationStatus @default(active)
+  createdAt               DateTime               @default(now()) @map("created_at")
+  updatedAt               DateTime?              @updatedAt @map("updated_at")
 
   batchCourseAssignment BatchCourseAssignment @relation(fields: [batchCourseAssignmentId], references: [id])
   faculty               Faculty               @relation(fields: [facultyId], references: [id])
@@ -70,16 +83,16 @@ model CourseAllocation {
 
 // One row per course attempt
 model CourseEnrollment {
-  id                      String    @id @default(uuid()) @db.Uuid
-  studentAcademicRecordId String    @map("student_academic_record_id") @db.Uuid
-  allocationId            String    @map("allocation_id") @db.Uuid
-  attemptNumber           Int       @default(1) @map("attempt_number")
-  status                  String    @default("enrolled")
-  isExtra                 Boolean   @default(false) @map("is_extra")
-  enrolledAt              DateTime  @default(now()) @map("enrolled_at")
-  droppedAt               DateTime? @map("dropped_at")
-  createdAt               DateTime  @default(now()) @map("created_at")
-  updatedAt               DateTime? @updatedAt @map("updated_at")
+  id                      String                 @id @default(uuid()) @db.Uuid
+  studentAcademicRecordId String                 @map("student_academic_record_id") @db.Uuid
+  allocationId            String                 @map("allocation_id") @db.Uuid
+  attemptNumber           Int                    @default(1) @map("attempt_number")
+  status                  CourseEnrollmentStatus @default(enrolled)
+  isExtra                 Boolean                @default(false) @map("is_extra")
+  enrolledAt              DateTime               @default(now()) @map("enrolled_at")
+  droppedAt               DateTime?              @map("dropped_at")
+  createdAt               DateTime               @default(now()) @map("created_at")
+  updatedAt               DateTime?              @updatedAt @map("updated_at")
 
   studentAcademicRecord StudentAcademicRecord @relation(fields: [studentAcademicRecordId], references: [id])
   allocation            CourseAllocation      @relation(fields: [allocationId], references: [id])

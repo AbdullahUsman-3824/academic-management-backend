@@ -3,11 +3,14 @@ import {
   IsOptional,
   IsString,
   IsInt,
+  IsBoolean,
   Min,
   Max,
+  IsEnum,
   IsIn,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
+import { CourseEnrollmentStatus } from '../../../../generated/prisma/enums';
 
 export class GetEnrollmentsQueryDto {
   @IsUUID('4')
@@ -22,10 +25,9 @@ export class GetEnrollmentsQueryDto {
   @IsOptional()
   courseId?: string;
 
-  @IsString()
+  @IsEnum(CourseEnrollmentStatus)
   @IsOptional()
-  @IsIn(['enrolled', 'dropped', 'completed', 'failed', 'reappear'])
-  status?: string;
+  status?: CourseEnrollmentStatus;
 
   @IsString()
   @IsOptional()
@@ -56,4 +58,13 @@ export class GetEnrollmentsQueryDto {
   @Max(100)
   @Type(() => Number)
   limit?: number;
+
+  @IsUUID('4')
+  @IsOptional()
+  academicSessionId?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true' || value === '1')
+  allSessions?: boolean;
 }

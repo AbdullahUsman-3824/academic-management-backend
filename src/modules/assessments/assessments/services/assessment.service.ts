@@ -1,8 +1,20 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../../../../database/prisma.service';
 import { Prisma } from '../../../../generated/prisma/client';
-import { CreateAssessmentDto, UpdateAssessmentDto } from '../dto/create-assessment.dto';
-import { BulkMarkEntryDto, UpdateStudentMarkDto } from '../dto/student-marks.dto';
+import {
+  CreateAssessmentDto,
+  UpdateAssessmentDto,
+} from '../dto/create-assessment.dto';
+import {
+  BulkMarkEntryDto,
+  UpdateStudentMarkDto,
+} from '../dto/student-marks.dto';
+import { ENROLLMENT_STATUS } from '../../../../common/constants/status.constants';
 
 @Injectable()
 export class AssessmentService {
@@ -17,7 +29,10 @@ export class AssessmentService {
   }
 
   // Get assessments for a specific allocation (course)
-  async getAssessmentsByAllocation(allocationId: string, facultyUserId: string) {
+  async getAssessmentsByAllocation(
+    allocationId: string,
+    facultyUserId: string,
+  ) {
     // Verify faculty owns this allocation
     await this.verifyAllocationOwnership(allocationId, facultyUserId);
 
@@ -53,7 +68,9 @@ export class AssessmentService {
         assessmentCategoryId: dto.assessmentCategoryId,
         title: dto.title,
         totalMarks: dto.totalMarks,
-        assessmentDate: dto.assessmentDate ? new Date(dto.assessmentDate) : null,
+        assessmentDate: dto.assessmentDate
+          ? new Date(dto.assessmentDate)
+          : null,
         createdBy: faculty.id,
         status: 'draft',
       },
@@ -64,7 +81,11 @@ export class AssessmentService {
   }
 
   // Update assessment
-  async updateAssessment(assessmentId: string, dto: UpdateAssessmentDto, facultyUserId: string) {
+  async updateAssessment(
+    assessmentId: string,
+    dto: UpdateAssessmentDto,
+    facultyUserId: string,
+  ) {
     const assessment = await this.prisma.assessment.findUnique({
       where: { id: assessmentId },
     });
@@ -74,7 +95,10 @@ export class AssessmentService {
     }
 
     // Verify ownership
-    await this.verifyAllocationOwnership(assessment.courseAllocationId, facultyUserId);
+    await this.verifyAllocationOwnership(
+      assessment.courseAllocationId,
+      facultyUserId,
+    );
 
     // Cannot update submitted assessments
     if (assessment.status === 'submitted') {
@@ -86,7 +110,9 @@ export class AssessmentService {
       data: {
         ...(dto.title && { title: dto.title }),
         ...(dto.totalMarks && { totalMarks: dto.totalMarks }),
-        ...(dto.assessmentDate && { assessmentDate: new Date(dto.assessmentDate) }),
+        ...(dto.assessmentDate && {
+          assessmentDate: new Date(dto.assessmentDate),
+        }),
       },
       include: {
         assessmentCategory: true,
@@ -105,7 +131,10 @@ export class AssessmentService {
     }
 
     // Verify ownership
-    await this.verifyAllocationOwnership(assessment.courseAllocationId, facultyUserId);
+    await this.verifyAllocationOwnership(
+      assessment.courseAllocationId,
+      facultyUserId,
+    );
 
     // Cannot delete submitted assessments
     if (assessment.status === 'submitted') {
@@ -138,10 +167,15 @@ export class AssessmentService {
     }
 
     // Verify ownership
-    await this.verifyAllocationOwnership(assessment.courseAllocationId, facultyUserId);
+    await this.verifyAllocationOwnership(
+      assessment.courseAllocationId,
+      facultyUserId,
+    );
 
     // Get all enrolled students for this course allocation
-    const students = await this.getEnrolledStudents(assessment.courseAllocationId);
+    const students = await this.getEnrolledStudents(
+      assessment.courseAllocationId,
+    );
 
     // Get marks for this assessment
     const marks = await this.prisma.studentMark.findMany({
@@ -157,13 +191,10 @@ export class AssessmentService {
 
     // Map marks to students
     const marksMap = new Map(
-      marks.map((m) => [
-        m.courseEnrollment.studentAcademicRecord.studentId,
-        m,
-      ]),
+      marks.map((m) => [m.courseEnrollment.studentAcademicRecord.studentId, m]),
     );
 
-    const studentsWithMarks = students.map(student => ({
+    const studentsWithMarks = students.map((student) => ({
       studentId: student.id,
       rollNumber: student.rollNumber,
       name: student.name,
@@ -178,9 +209,11 @@ export class AssessmentService {
         totalStudents: students.length,
         marksEntered: marks.length,
         pending: students.length - marks.length,
-        averageMarks: marks.length > 0
-          ? marks.reduce((sum, m) => sum + Number(m.marksObtained), 0) / marks.length
-          : 0,
+        averageMarks:
+          marks.length > 0
+            ? marks.reduce((sum, m) => sum + Number(m.marksObtained), 0) /
+              marks.length
+            : 0,
       },
     };
   }
@@ -196,7 +229,10 @@ export class AssessmentService {
     }
 
     // Verify ownership
-    await this.verifyAllocationOwnership(assessment.courseAllocationId, facultyUserId);
+    await this.verifyAllocationOwnership(
+      assessment.courseAllocationId,
+      facultyUserId,
+    );
 
     // Get faculty ID
     const faculty = await this.prisma.faculty.findUnique({
@@ -211,7 +247,7 @@ export class AssessmentService {
     for (const mark of dto.marks) {
       if (mark.marksObtained > Number(assessment.totalMarks.toString())) {
         throw new BadRequestException(
-          `Marks obtained (${mark.marksObtained}) cannot exceed total marks (${assessment.totalMarks.toString()})`
+          `Marks obtained (${mark.marksObtained}) cannot exceed total marks (${assessment.totalMarks.toString()})`,
         );
       }
     }
@@ -224,26 +260,28 @@ export class AssessmentService {
           assessment.courseAllocationId,
           mark.studentId,
         );
-        results.push(await tx.studentMark.upsert({
-          where: {
-            assessmentId_courseEnrollmentId: {
+        results.push(
+          await tx.studentMark.upsert({
+            where: {
+              assessmentId_courseEnrollmentId: {
+                assessmentId: dto.assessmentId,
+                courseEnrollmentId: enrollment.id,
+              },
+            },
+            create: {
               assessmentId: dto.assessmentId,
               courseEnrollmentId: enrollment.id,
+              marksObtained: mark.marksObtained,
+              remarks: mark.remarks,
+              enteredBy: faculty.id,
             },
-          },
-          create: {
-            assessmentId: dto.assessmentId,
-            courseEnrollmentId: enrollment.id,
-            marksObtained: mark.marksObtained,
-            remarks: mark.remarks,
-            enteredBy: faculty.id,
-          },
-          update: {
-            marksObtained: mark.marksObtained,
-            remarks: mark.remarks,
-            updatedBy: faculty.id,
-          },
-        }));
+            update: {
+              marksObtained: mark.marksObtained,
+              remarks: mark.remarks,
+              updatedBy: faculty.id,
+            },
+          }),
+        );
       }
       return results;
     });
@@ -254,7 +292,7 @@ export class AssessmentService {
     assessmentId: string,
     studentId: string,
     dto: UpdateStudentMarkDto,
-    facultyUserId: string
+    facultyUserId: string,
   ) {
     const assessment = await this.prisma.assessment.findUnique({
       where: { id: assessmentId },
@@ -265,12 +303,15 @@ export class AssessmentService {
     }
 
     // Verify ownership
-    await this.verifyAllocationOwnership(assessment.courseAllocationId, facultyUserId);
+    await this.verifyAllocationOwnership(
+      assessment.courseAllocationId,
+      facultyUserId,
+    );
 
     // Validate marks
     if (dto.marksObtained > Number(assessment.totalMarks.toString())) {
       throw new BadRequestException(
-        `Marks obtained (${dto.marksObtained}) cannot exceed total marks (${assessment.totalMarks.toString()})`
+        `Marks obtained (${dto.marksObtained}) cannot exceed total marks (${assessment.totalMarks.toString()})`,
       );
     }
 
@@ -320,7 +361,10 @@ export class AssessmentService {
     }
 
     // Verify ownership
-    await this.verifyAllocationOwnership(assessment.courseAllocationId, facultyUserId);
+    await this.verifyAllocationOwnership(
+      assessment.courseAllocationId,
+      facultyUserId,
+    );
 
     return this.prisma.assessment.update({
       where: { id: assessmentId },
@@ -332,7 +376,10 @@ export class AssessmentService {
   }
 
   // Helper: Verify faculty owns the allocation
-  private async verifyAllocationOwnership(allocationId: string, facultyUserId: string) {
+  private async verifyAllocationOwnership(
+    allocationId: string,
+    facultyUserId: string,
+  ) {
     const faculty = await this.prisma.faculty.findUnique({
       where: { userId: facultyUserId },
     });
@@ -349,7 +396,9 @@ export class AssessmentService {
     });
 
     if (!allocation) {
-      throw new ForbiddenException('You do not have access to this course allocation');
+      throw new ForbiddenException(
+        'You do not have access to this course allocation',
+      );
     }
 
     return allocation;
@@ -365,7 +414,7 @@ export class AssessmentService {
       where: {
         allocationId,
         studentAcademicRecord: { studentId },
-        status: 'enrolled',
+        status: ENROLLMENT_STATUS.ENROLLED,
       },
     });
     if (!enrollment) {
@@ -390,7 +439,7 @@ export class AssessmentService {
     }
 
     const enrollments = await this.prisma.courseEnrollment.findMany({
-      where: { allocationId, status: 'enrolled' },
+      where: { allocationId, status: ENROLLMENT_STATUS.ENROLLED },
       include: {
         studentAcademicRecord: {
           include: {

@@ -15,9 +15,11 @@ import {
 } from '../dto/enrollment.dto';
 import {
   ACADEMIC_SESSION_STATUS,
+  ALLOCATION_STATUS,
   ENROLLMENT_STATUS,
   STUDENT_RECORD_STATUS,
 } from '../../../../common/constants/status.constants';
+import { CourseEnrollmentStatus } from '../../../../generated/prisma/enums';
 
 @Injectable()
 export class EnrollmentsService {
@@ -32,13 +34,21 @@ export class EnrollmentsService {
    * Credit-hour load for a student's current semester, summed over active
    * (non-dropped) enrollments. Used to enforce Semester.min/maxCredits.
    */
-  private async currentCreditLoad(
+  async getCurrentCreditLoad(
     prisma: PrismaService | Prisma.TransactionClient,
     studentAcademicRecordId: string,
-  ): Promise<{ credits: number; maxCredits: number | null }> {
+  ): Promise<{
+    credits: number;
+    minCredits: number | null;
+    maxCredits: number | null;
+  }> {
     const record = await prisma.studentAcademicRecord.findUnique({
       where: { id: studentAcademicRecordId },
-      select: { semester: { select: { number: true, maxCredits: true } } },
+      select: {
+        semester: {
+          select: { number: true, minCredits: true, maxCredits: true },
+        },
+      },
     });
     const semester = record?.semester;
 
@@ -49,24 +59,44 @@ export class EnrollmentsService {
       },
       include: {
         allocation: {
-          include: { batchCourseAssignment: { include: { course: { select: { creditHours: true } } } } },
+          include: {
+            batchCourseAssignment: {
+              include: { course: { select: { creditHours: true } } },
+            },
+          },
         },
       },
     });
     const credits = enrolled.reduce(
-      (sum, e) => sum + (e.allocation.batchCourseAssignment.course.creditHours || 0),
+      (sum, e) =>
+        sum + (e.allocation.batchCourseAssignment.course.creditHours || 0),
       0,
     );
-    return { credits, maxCredits: semester?.maxCredits ?? null };
+    return {
+      credits,
+      minCredits: semester?.minCredits ?? null,
+      maxCredits: semester?.maxCredits ?? null,
+    };
   }
 
-  async create(dto: CreateEnrollmentDto) {
+  async create(dto: CreateEnrollmentDto, tx?: Prisma.TransactionClient) {
+    if (tx) return this.createInTransaction(dto, tx);
+    return this.prisma.$transaction(
+      (transaction) => this.createInTransaction(dto, transaction),
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
+
+  private async createInTransaction(
+    dto: CreateEnrollmentDto,
+    prisma: Prisma.TransactionClient,
+  ) {
     let studentAcademicRecordId = dto.studentAcademicRecordId;
 
     // If studentId is provided instead of studentAcademicRecordId, look up the academic record
     if (!studentAcademicRecordId && dto.studentId) {
       // Get active academic session
-      const activeSession = await this.prisma.academicSession.findFirst({
+      const activeSession = await prisma.academicSession.findFirst({
         where: { status: ACADEMIC_SESSION_STATUS.ACTIVE },
         orderBy: { startDate: 'desc' },
       });
@@ -78,7 +108,7 @@ export class EnrollmentsService {
       }
 
       // Find student's academic record for the active session
-      const academicRecord = await this.prisma.studentAcademicRecord.findFirst({
+      const academicRecord = await prisma.studentAcademicRecord.findFirst({
         where: {
           studentId: dto.studentId,
           academicSessionId: activeSession.id,
@@ -118,7 +148,7 @@ export class EnrollmentsService {
     }
 
     // Verify student academic record exists
-    const studentRecord = await this.prisma.studentAcademicRecord.findUnique({
+    const studentRecord = await prisma.studentAcademicRecord.findUnique({
       where: { id: studentAcademicRecordId },
       include: {
         student: {
@@ -132,61 +162,58 @@ export class EnrollmentsService {
     if (!studentRecord) {
       throw new NotFoundException('Student academic record not found');
     }
+    if (studentRecord.courseRegistrationFinalizedAt) {
+      throw new BadRequestException(
+        'Course registration has already been finalized for this academic record',
+      );
+    }
 
     // Verify course exists
-    const course = await this.prisma.course.findUnique({
+    const course = await prisma.course.findUnique({
       where: { id: dto.courseId },
     });
     if (!course) {
       throw new NotFoundException('Course not found');
     }
 
-    // If this is an extra course, validate and require allocationId
-    if (dto.isExtra) {
-      if (!dto.allocationId) {
-        throw new BadRequestException(
-          'allocationId is required for extra course enrollments',
-        );
-      }
-
-      // Verify allocation exists and is active
-      const allocation = await this.prisma.courseAllocation.findUnique({
-        where: { id: dto.allocationId },
-        include: {
-          batchCourseAssignment: { include: { course: true } },
-          section: {
-            include: {
-              batch: true,
-            },
-          },
-          faculty: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-            },
-          },
+    // Verify the selected allocation is active and teaches the requested course.
+    const allocation = await prisma.courseAllocation.findUnique({
+      where: { id: dto.allocationId },
+      select: {
+        status: true,
+        sectionId: true,
+        academicSessionId: true,
+        batchCourseAssignment: {
+          select: { courseId: true, semesterId: true },
         },
-      });
-
-      if (!allocation) {
-        throw new NotFoundException('Course allocation not found');
-      }
-
-      if (allocation.status !== 'active') {
-        throw new BadRequestException('Selected allocation is not active');
-      }
-
-      if (allocation.batchCourseAssignment.courseId !== dto.courseId) {
-        throw new BadRequestException(
-          'Allocation does not match the selected course',
-        );
-      }
+      },
+    });
+    if (!allocation) {
+      throw new NotFoundException('Course allocation not found');
+    }
+    if (allocation.status !== ALLOCATION_STATUS.ACTIVE) {
+      throw new BadRequestException('Selected allocation is not active');
+    }
+    if (allocation.batchCourseAssignment.courseId !== dto.courseId) {
+      throw new BadRequestException(
+        'Allocation does not match the selected course',
+      );
+    }
+    if (
+      allocation.academicSessionId !== studentRecord.academicSessionId ||
+      (!dto.isExtra &&
+        (allocation.sectionId !== studentRecord.sectionId ||
+          allocation.batchCourseAssignment.semesterId !==
+            studentRecord.semesterId))
+    ) {
+      throw new BadRequestException(
+        'Allocation does not match the student academic record',
+      );
     }
 
     // Enforce the semester credit-hour ceiling (#7)
-    const { credits, maxCredits } = await this.currentCreditLoad(
-      this.prisma,
+    const { credits, maxCredits } = await this.getCurrentCreditLoad(
+      prisma,
       studentAcademicRecordId,
     );
     if (maxCredits != null && credits + course.creditHours > maxCredits) {
@@ -196,7 +223,7 @@ export class EnrollmentsService {
     }
 
     try {
-      return await this.prisma.courseEnrollment.create({
+      return await prisma.courseEnrollment.create({
         data: {
           studentAcademicRecordId,
           isExtra: dto.isExtra ?? false,
@@ -247,81 +274,217 @@ export class EnrollmentsService {
   }
 
   async bulkEnroll(dto: BulkEnrollDto) {
-    const results: Array<
-      Awaited<ReturnType<EnrollmentsService['create']>>
-    > = [];
-    const errors: Array<{ courseId: string; error: string }> = [];
+    const results: Array<Awaited<ReturnType<EnrollmentsService['create']>>> =
+      [];
+    return this.prisma.$transaction(
+      async (tx) => {
+        let studentAcademicRecordId = dto.studentAcademicRecordId;
+        if (!studentAcademicRecordId && dto.studentId) {
+          const activeSession = await tx.academicSession.findFirst({
+            where: { status: ACADEMIC_SESSION_STATUS.ACTIVE },
+            orderBy: { startDate: 'desc' },
+            select: { id: true },
+          });
+          if (!activeSession) {
+            throw new BadRequestException('No active academic session found');
+          }
 
-    for (const courseId of dto.courseIds) {
-      try {
-        const enrollment = await this.create({
-          studentAcademicRecordId: dto.studentAcademicRecordId,
-          studentId: dto.studentId,
-          courseId,
-          isExtra: dto.isExtra,
-        });
-        results.push(enrollment);
-      } catch (error: unknown) {
-        errors.push({
-          courseId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
+          const record = await tx.studentAcademicRecord.findFirst({
+            where: {
+              studentId: dto.studentId,
+              academicSessionId: activeSession.id,
+            },
+            select: { id: true },
+          });
+          if (!record) {
+            throw new BadRequestException(
+              'Student does not have an academic record for the current session',
+            );
+          }
+          studentAcademicRecordId = record.id;
+        }
+        if (!studentAcademicRecordId) {
+          throw new BadRequestException(
+            'Either studentAcademicRecordId or studentId must be provided',
+          );
+        }
 
-    return {
-      success: results,
-      errors,
-      summary: {
-        total: dto.courseIds.length,
-        created: results.length,
-        failed: errors.length,
+        const studentRecord = await tx.studentAcademicRecord.findUnique({
+          where: { id: studentAcademicRecordId },
+          select: {
+            sectionId: true,
+            academicSessionId: true,
+            semesterId: true,
+            courseRegistrationFinalizedAt: true,
+          },
+        });
+        if (!studentRecord) {
+          throw new NotFoundException('Student academic record not found');
+        }
+        if (studentRecord.courseRegistrationFinalizedAt) {
+          throw new BadRequestException(
+            'Course registration has already been finalized for this academic record',
+          );
+        }
+        if (dto.isExtra && dto.allocationIds?.length !== dto.courseIds.length) {
+          throw new BadRequestException(
+            'allocationIds must contain one allocation for each extra course',
+          );
+        }
+        if (
+          dto.allocationIds &&
+          dto.allocationIds.length !== dto.courseIds.length
+        ) {
+          throw new BadRequestException(
+            'allocationIds must match the number of courseIds',
+          );
+        }
+
+        for (const [index, courseId] of dto.courseIds.entries()) {
+          let allocationId = dto.allocationIds?.[index];
+          if (!allocationId) {
+            const allocation = await tx.courseAllocation.findFirst({
+              where: {
+                sectionId: studentRecord.sectionId,
+                academicSessionId: studentRecord.academicSessionId,
+                status: ALLOCATION_STATUS.ACTIVE,
+                batchCourseAssignment: {
+                  courseId,
+                  semesterId: studentRecord.semesterId,
+                },
+              },
+              select: { id: true },
+            });
+            if (!allocation) {
+              throw new BadRequestException(
+                `No active allocation found for course ${courseId} in the student's section and semester`,
+              );
+            }
+            allocationId = allocation.id;
+          }
+
+          const enrollment = await this.create(
+            {
+              studentAcademicRecordId,
+              courseId,
+              allocationId,
+              isExtra: dto.isExtra,
+            },
+            tx,
+          );
+          results.push(enrollment);
+        }
+
+        return {
+          success: results,
+          errors: [],
+          summary: {
+            total: dto.courseIds.length,
+            created: results.length,
+            failed: 0,
+          },
+        };
       },
-    };
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
+
+  async finalizeRegistration(studentAcademicRecordId: string) {
+    return this.prisma.$transaction(
+      async (tx) => {
+        const record = await tx.studentAcademicRecord.findUnique({
+          where: { id: studentAcademicRecordId },
+          select: { courseRegistrationFinalizedAt: true },
+        });
+        if (!record) {
+          throw new NotFoundException('Student academic record not found');
+        }
+
+        const { credits, minCredits } = await this.getCurrentCreditLoad(
+          tx,
+          studentAcademicRecordId,
+        );
+        if (
+          !record.courseRegistrationFinalizedAt &&
+          minCredits != null &&
+          credits < minCredits
+        ) {
+          throw new BadRequestException(
+            `Course registration requires at least ${minCredits} credit hours; current load is ${credits}.`,
+          );
+        }
+
+        const finalizedAt = record.courseRegistrationFinalizedAt ?? new Date();
+        if (!record.courseRegistrationFinalizedAt) {
+          await tx.studentAcademicRecord.update({
+            where: { id: studentAcademicRecordId },
+            data: { courseRegistrationFinalizedAt: finalizedAt },
+          });
+        }
+
+        return {
+          studentAcademicRecordId,
+          courseRegistrationFinalizedAt: finalizedAt,
+          credits,
+          minCredits,
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 
   async findAll(filters?: {
     studentId?: string;
     studentAcademicRecordId?: string;
     courseId?: string;
-    status?: string;
+    status?: CourseEnrollmentStatus;
     search?: string;
     batchId?: string;
     sectionId?: string;
     studentStatus?: string;
+    academicSessionId?: string;
+    allSessions?: boolean;
     page?: number;
     limit?: number;
   }) {
-    // Always filter by active session
-    const activeSession = await this.prisma.academicSession.findFirst({
-      where: { status: ACADEMIC_SESSION_STATUS.ACTIVE },
-      orderBy: { startDate: 'desc' },
-    });
+    let sessionFilter: string | undefined;
+    if (!filters?.allSessions) {
+      if (filters?.academicSessionId) {
+        sessionFilter = filters.academicSessionId;
+      } else {
+        const activeSession = await this.prisma.academicSession.findFirst({
+          where: { status: ACADEMIC_SESSION_STATUS.ACTIVE },
+          orderBy: { startDate: 'desc' },
+        });
+        sessionFilter = activeSession?.id;
+      }
+    }
 
     const search = filters?.search?.trim();
     const hasSearch = !!search && search.length >= 2;
 
     // Build student record filters
     const studentRecordWhere: Prisma.StudentAcademicRecordWhereInput = {
-      ...(activeSession && { academicSessionId: activeSession.id }),
+      ...(sessionFilter && { academicSessionId: sessionFilter }),
       ...(filters?.studentId && { studentId: filters.studentId }),
       ...(filters?.sectionId && { sectionId: filters.sectionId }),
     };
 
     // Only add student filters if any are provided
-    const hasStudentFilters = hasSearch || filters?.batchId || filters?.studentStatus;
-    
+    const hasStudentFilters =
+      hasSearch || filters?.batchId || filters?.studentStatus;
+
     if (hasStudentFilters) {
       const studentWhere: Prisma.StudentWhereInput = {};
-      
+
       if (filters?.batchId) {
         studentWhere.batchId = filters.batchId;
       }
-      
+
       if (filters?.studentStatus) {
         studentWhere.status = filters.studentStatus;
       }
-      
+
       if (hasSearch) {
         studentWhere.OR = [
           { firstName: { contains: search, mode: 'insensitive' } },
@@ -331,7 +494,7 @@ export class EnrollmentsService {
           { cnic: { contains: search, mode: 'insensitive' } },
         ];
       }
-      
+
       studentRecordWhere.student = studentWhere;
     }
 
@@ -417,7 +580,8 @@ export class EnrollmentsService {
             student: enrollment.studentAcademicRecord.student
               ? {
                   ...enrollment.studentAcademicRecord.student,
-                  studentNumber: enrollment.studentAcademicRecord.student.stdRegNumber,
+                  studentNumber:
+                    enrollment.studentAcademicRecord.student.stdRegNumber,
                 }
               : undefined,
           }
@@ -465,7 +629,9 @@ export class EnrollmentsService {
         },
       },
       include: {
-        allocation: { include: { batchCourseAssignment: { include: { course: true } } } },
+        allocation: {
+          include: { batchCourseAssignment: { include: { course: true } } },
+        },
         studentAcademicRecord: {
           include: {
             academicSession: true,
@@ -483,9 +649,22 @@ export class EnrollmentsService {
     const enrollment = await this.findOne(id);
 
     // Validate status transitions
-    if (enrollment.status === 'completed' && dto.status !== 'reappear') {
+    if (
+      enrollment.status === ENROLLMENT_STATUS.COMPLETED &&
+      dto.status !== ENROLLMENT_STATUS.REAPPEAR
+    ) {
       throw new BadRequestException(
         'Cannot change status of completed enrollment except to reappear',
+      );
+    }
+
+    if (
+      enrollment.studentAcademicRecord.courseRegistrationFinalizedAt &&
+      (enrollment.status === ENROLLMENT_STATUS.DROPPED) !==
+        (dto.status === ENROLLMENT_STATUS.DROPPED)
+    ) {
+      throw new BadRequestException(
+        'Cannot change the active course load after registration has been finalized',
       );
     }
 
@@ -493,10 +672,14 @@ export class EnrollmentsService {
       where: { id },
       data: {
         status: dto.status,
-        ...(dto.status === 'dropped' && { droppedAt: new Date() }),
+        ...(dto.status === ENROLLMENT_STATUS.DROPPED && {
+          droppedAt: new Date(),
+        }),
       },
       include: {
-        allocation: { include: { batchCourseAssignment: { include: { course: true } } } },
+        allocation: {
+          include: { batchCourseAssignment: { include: { course: true } } },
+        },
         studentAcademicRecord: {
           include: {
             student: {
@@ -514,17 +697,13 @@ export class EnrollmentsService {
   }
 
   async drop(id: string) {
-    return this.updateStatus(id, { status: 'dropped' });
+    return this.updateStatus(id, { status: ENROLLMENT_STATUS.DROPPED });
   }
 
   async remove(id: string) {
-    await this.findOne(id);
     // Soft delete: mark as dropped instead of deleting, so existing marks /
     // results stay linked and auditable (#10).
-    await this.prisma.courseEnrollment.update({
-      where: { id },
-      data: { status: ENROLLMENT_STATUS.DROPPED, droppedAt: new Date() },
-    });
+    await this.drop(id);
     return { id };
   }
 
@@ -532,7 +711,9 @@ export class EnrollmentsService {
     const enrollments = await this.prisma.courseEnrollment.findMany({
       where: { studentAcademicRecordId },
       include: {
-        allocation: { include: { batchCourseAssignment: { include: { course: true } } } },
+        allocation: {
+          include: { batchCourseAssignment: { include: { course: true } } },
+        },
       },
     });
 
@@ -543,11 +724,19 @@ export class EnrollmentsService {
 
     const stats = {
       total: enrollments.length,
-      enrolled: enrollments.filter((e) => e.status === 'enrolled').length,
-      dropped: enrollments.filter((e) => e.status === 'dropped').length,
-      completed: enrollments.filter((e) => e.status === 'completed').length,
-      failed: enrollments.filter((e) => e.status === 'failed').length,
-      reappear: enrollments.filter((e) => e.status === 'reappear').length,
+      enrolled: enrollments.filter(
+        (e) => e.status === ENROLLMENT_STATUS.ENROLLED,
+      ).length,
+      dropped: enrollments.filter((e) => e.status === ENROLLMENT_STATUS.DROPPED)
+        .length,
+      completed: enrollments.filter(
+        (e) => e.status === ENROLLMENT_STATUS.COMPLETED,
+      ).length,
+      failed: enrollments.filter((e) => e.status === ENROLLMENT_STATUS.FAILED)
+        .length,
+      reappear: enrollments.filter(
+        (e) => e.status === ENROLLMENT_STATUS.REAPPEAR,
+      ).length,
       totalCreditHours,
     };
 
@@ -582,12 +771,14 @@ export class EnrollmentsService {
       where: {
         batchCourseAssignment: { courseId },
         academicSessionId: activeSession.id,
-        status: 'active',
+        status: ALLOCATION_STATUS.ACTIVE,
       },
       include: {
         batchCourseAssignment: {
           include: {
-            course: { select: { id: true, code: true, name: true, creditHours: true } },
+            course: {
+              select: { id: true, code: true, name: true, creditHours: true },
+            },
             semester: { select: { number: true } },
           },
         },
@@ -688,22 +879,27 @@ export class EnrollmentsService {
       const errors: Array<{ courseId: string; error: string }> = [];
       let skipped = 0;
 
-      const academicRecord =
-        await prisma.studentAcademicRecord.findUnique({
-          where: { id: studentAcademicRecordId },
-          select: { sectionId: true, academicSessionId: true },
-        });
+      const academicRecord = await prisma.studentAcademicRecord.findUnique({
+        where: { id: studentAcademicRecordId },
+        select: {
+          sectionId: true,
+          academicSessionId: true,
+          semesterId: true,
+          courseRegistrationFinalizedAt: true,
+        },
+      });
       if (!academicRecord) {
+        throw new BadRequestException('Student academic record not found');
+      }
+      if (academicRecord.courseRegistrationFinalizedAt) {
         throw new BadRequestException(
-          'Student academic record not found',
+          'Course registration has already been finalized for this academic record',
         );
       }
 
       // Enforce the semester credit-hour ceiling even in auto-enrollment (#7)
-      const { credits: startCredits, maxCredits } = await this.currentCreditLoad(
-        prisma,
-        studentAcademicRecordId,
-      );
+      const { credits: startCredits, maxCredits } =
+        await this.getCurrentCreditLoad(prisma, studentAcademicRecordId);
       let runningCredits = startCredits;
 
       for (const course of compulsoryCourses) {
@@ -719,15 +915,18 @@ export class EnrollmentsService {
         }
 
         try {
-          const allocation =
-            await prisma.courseAllocation.findFirst({
-              where: {
-                sectionId: academicRecord.sectionId,
-                academicSessionId: academicRecord.academicSessionId,
-                batchCourseAssignment: { courseId: course.id },
+          const allocation = await prisma.courseAllocation.findFirst({
+            where: {
+              sectionId: academicRecord.sectionId,
+              academicSessionId: academicRecord.academicSessionId,
+              status: ALLOCATION_STATUS.ACTIVE,
+              batchCourseAssignment: {
+                courseId: course.id,
+                semesterId: academicRecord.semesterId,
               },
-              select: { id: true },
-            });
+            },
+            select: { id: true },
+          });
           if (!allocation) {
             skipped++;
             this.logger.warn(
@@ -782,11 +981,8 @@ export class EnrollmentsService {
       return { created, skipped, errors };
     } catch (error: unknown) {
       this.logger.error('[AUTO-ENROLL] Fatal error:', error);
-      const message =
-        error instanceof Error ? error.message : String(error);
-      throw new BadRequestException(
-        `Auto-enrollment failed: ${message}`,
-      );
+      const message = error instanceof Error ? error.message : String(error);
+      throw new BadRequestException(`Auto-enrollment failed: ${message}`);
     }
   }
 
@@ -874,6 +1070,11 @@ export class EnrollmentsService {
         const enrollmentsBefore = record._count.courseEnrollments;
         const batchId = record.student.batchId;
         const semesterNumber = record.semester.number;
+        if (record.courseRegistrationFinalizedAt) {
+          throw new BadRequestException(
+            'Course registration has already been finalized for this academic record',
+          );
+        }
 
         // Do NOT skip students who already have enrollments. Instead we top-up
         // only the batch courses they are still missing (#4).
@@ -891,7 +1092,9 @@ export class EnrollmentsService {
             where: { studentAcademicRecordId: record.id },
             select: {
               allocation: {
-                select: { batchCourseAssignment: { select: { courseId: true } } },
+                select: {
+                  batchCourseAssignment: { select: { courseId: true } },
+                },
               },
             },
           });
@@ -922,10 +1125,15 @@ export class EnrollmentsService {
           studentsProcessed++;
         } else {
           // Actual enrollment
-          const enrollResult = await this.autoEnrollInBatchCourses(
-            record.id,
-            batchId,
-            semesterNumber,
+          const enrollResult = await this.prisma.$transaction(
+            (tx) =>
+              this.autoEnrollInBatchCourses(
+                record.id,
+                batchId,
+                semesterNumber,
+                tx,
+              ),
+            { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
           );
 
           results.push({
@@ -952,8 +1160,7 @@ export class EnrollmentsService {
           );
         }
       } catch (error: unknown) {
-        const message =
-          error instanceof Error ? error.message : String(error);
+        const message = error instanceof Error ? error.message : String(error);
         this.logger.error(
           `[BULK RE-ENROLL] ✗ ${record.student.stdRegNumber}: ${message}`,
         );
@@ -984,5 +1191,4 @@ export class EnrollmentsService {
       errors: globalErrors,
     };
   }
-
 }
