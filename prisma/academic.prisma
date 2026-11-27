@@ -20,6 +20,12 @@ enum BatchStatus {
   CANCELLED
 }
 
+enum BatchSemesterStatus {
+  UPCOMING
+  ACTIVE
+  COMPLETED
+}
+
 enum StudentAcademicRecordStatus {
   ENROLLED
   PROMOTED
@@ -73,6 +79,7 @@ model Batch {
   students          Student[]
   sections          Section[]
   courseAssignments BatchCourseAssignment[]
+  batchSemesters    BatchSemester[]
 
   @@index([entryYearId])
   @@map("batches")
@@ -105,8 +112,25 @@ model Semester {
 
   batchCourseAssignments BatchCourseAssignment[]
   academicRecords        StudentAcademicRecord[]
+  batchSemesters         BatchSemester[]
 
   @@map("semesters")
+}
+
+model BatchSemester {
+  id         String              @id @default(uuid()) @db.Uuid
+  batchId    String              @map("batch_id") @db.Uuid
+  semesterId String              @map("semester_id") @db.Uuid
+  status     BatchSemesterStatus @default(UPCOMING)
+  lockedAt   DateTime?           @map("locked_at")
+  createdAt  DateTime            @default(now()) @map("created_at")
+  updatedAt  DateTime?           @updatedAt @map("updated_at")
+
+  batch    Batch    @relation(fields: [batchId], references: [id])
+  semester Semester @relation(fields: [semesterId], references: [id])
+
+  @@unique([batchId, semesterId])
+  @@map("batch_semesters")
 }
 
 model StudentAcademicRecord {

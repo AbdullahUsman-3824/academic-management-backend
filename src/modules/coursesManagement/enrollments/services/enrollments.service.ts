@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../../../database/prisma.service';
 import { Prisma } from '../../../../generated/prisma/client';
-import { BatchCourseAssignmentsService } from '../../batch-courses/services/batch-course-assignments.service';
+import { BatchCourseAssignmentsService } from '../../batch-curriculum/services/batch-course-assignments.service';
 import {
   CreateEnrollmentDto,
   UpdateEnrollmentStatusDto,

@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '../../../../generated/prisma/client';
 import { PrismaService } from '../../../../database/prisma.service';
-import { BatchCourseAssignmentsService } from '../../batch-courses/services/batch-course-assignments.service';
+import { BatchCourseAssignmentsService } from '../../batch-curriculum/services/batch-course-assignments.service';
 import { EnrollmentsService } from './enrollments.service';
 
 describe('EnrollmentsService', () => {

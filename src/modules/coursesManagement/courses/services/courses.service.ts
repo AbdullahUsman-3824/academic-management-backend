@@ -37,17 +37,19 @@ export class CoursesService {
   }
 
   async findAll(query: QueryCoursesDto) {
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 20;
+    const page = Math.max(1, query.page ?? 1);
+    const limit = Math.min(100, Math.max(1, query.limit ?? 20)); // safety bounds
     const skip = (page - 1) * limit;
 
     const where: Prisma.CourseWhereInput = {
       ...(query.status && { status: query.status }),
-      ...(query.search && {
+      ...(query.search?.trim() && {
         OR: [
-          { code: { contains: query.search, mode: 'insensitive' } },
-          { name: { contains: query.search, mode: 'insensitive' } },
-          { description: { contains: query.search, mode: 'insensitive' } },
+          { code: { contains: query.search.trim(), mode: 'insensitive' } },
+          { name: { contains: query.search.trim(), mode: 'insensitive' } },
+          {
+            description: { contains: query.search.trim(), mode: 'insensitive' },
+          },
         ],
       }),
     };
@@ -62,8 +64,30 @@ export class CoursesService {
       this.prisma.course.count({ where }),
     ]);
 
+    if (data.length === 0) {
+      return {
+        data: [],
+        meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 },
+      };
+    }
+
+    const courseIds = data.map((c) => c.id);
+
+    const usageCounts = await this.prisma.batchCourseAssignment.groupBy({
+      by: ['courseId'],
+      where: { courseId: { in: courseIds } },
+      _count: { batchId: true },
+    });
+
+    const usageCountByCourseId = new Map(
+      usageCounts.map((u) => [u.courseId, u._count.batchId]),
+    );
+
     return {
-      data,
+      data: data.map((course) => ({
+        ...course,
+        usageCount: usageCountByCourseId.get(course.id) ?? 0,
+      })),
       meta: {
         page,
         limit,
@@ -78,7 +102,17 @@ export class CoursesService {
     if (!course) {
       throw new NotFoundException('Course not found');
     }
-    return course;
+
+    const [usage] = await this.prisma.batchCourseAssignment.groupBy({
+      by: ['courseId'],
+      where: { courseId: id },
+      _count: { batchId: true },
+    });
+
+    return {
+      ...course,
+      usageCount: usage?._count.batchId ?? 0,
+    };
   }
 
   async update(id: string, dto: UpdateCourseDto) {
