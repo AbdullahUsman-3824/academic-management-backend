@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
   ParseUUIDPipe,
 } from '@nestjs/common';
@@ -14,6 +15,7 @@ import {
   CreateAllocationDto,
   BulkAllocationDto,
   UpdateAllocationDto,
+  GetAllocationsQueryDto,
 } from '../dto';
 import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
 
@@ -21,6 +23,16 @@ import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
 @UseGuards(JwtAuthGuard)
 export class AllocationsController {
   constructor(private readonly allocationsService: AllocationsService) {}
+
+  @Get()
+  async findAll(@Query() query: GetAllocationsQueryDto) {
+    const result = await this.allocationsService.findAll(query);
+    return {
+      success: true,
+      data: result.data,
+      pagination: result.pagination,
+    };
+  }
 
   @Post()
   async create(@Body() dto: CreateAllocationDto) {
@@ -66,6 +78,12 @@ export class AllocationsController {
     return this.allocationsService.getSectionAllocationHistory(sectionId);
   }
 
+  @Get(':id')
+  async findOne(@Param('id', ParseUUIDPipe) id: string) {
+    const data = await this.allocationsService.findOne(id);
+    return { success: true, data };
+  }
+
   @Patch(':id')
   async update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -80,7 +98,7 @@ export class AllocationsController {
   }
 
   @Delete(':id')
-  async remove(@Param('id') id: string) {
+  async remove(@Param('id', ParseUUIDPipe) id: string) {
     const result = await this.allocationsService.remove(id);
     return {
       success: true,
