@@ -153,7 +153,7 @@ export class StudentAcademicRecordService {
       });
 
       // ── AUTO-ENROLL in batch courses ──────────
-      let enrollmentResult: {
+      const enrollmentResult: {
         created: Array<{
           courseId: string;
           courseCode: string;
@@ -172,13 +172,13 @@ export class StudentAcademicRecordService {
         this.logger.log(
           `[AUTO-ENROLL] Starting for student ${studentId}, batch ${batchId}, semester ${semesterNumber}`,
         );
-        enrollmentResult =
-          await this.enrollmentsService.autoEnrollInBatchCourses(
-            record.id,
-            batchId,
-            semesterNumber,
-            client,
-          );
+        // enrollmentResult =
+        //   await this.enrollmentsService.autoEnrollInBatchCourses(
+        //     record.id,
+        //     batchId,
+        //     semesterNumber,
+        //     client,
+        //   );
         this.logger.log(
           `[AUTO-ENROLL] Complete: ${enrollmentResult.created.length} courses enrolled, ${enrollmentResult.skipped} skipped, ${enrollmentResult.errors.length} errors`,
         );

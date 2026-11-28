@@ -54,11 +54,19 @@ export class BatchService {
       );
     }
 
+    const firstSemester = await client.semester.findUnique({
+      where: { number: 1 },
+    });
+    if (!firstSemester) {
+      throw new NotFoundException('Semester 1 not configured');
+    }
+
     try {
       return await client.batch.create({
         data: {
           name,
           entryYearId,
+          currentSemesterId: firstSemester.id,
           programDuration: programDuration ?? DEFAULT_PROGRAM_DURATION,
           sectionCapacity: sectionCapacity ?? DEFAULT_SECTION_CAPACITY,
           status: BatchStatus.ACTIVE,

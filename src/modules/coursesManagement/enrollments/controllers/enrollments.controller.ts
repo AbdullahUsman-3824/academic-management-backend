@@ -42,7 +42,7 @@ export class EnrollmentsController {
 
   @Post('bulk-re-enroll')
   // @Permissions('enrollments:create')
-  async bulkReEnroll(
+   bulkReEnroll(
     @Body()
     body: {
       batchId?: string;
@@ -50,13 +50,13 @@ export class EnrollmentsController {
       dryRun?: boolean;
     },
   ) {
-    const data = await this.enrollmentsService.bulkReEnrollStudents(body);
+    // const data = await this.enrollmentsService.bulkReEnrollStudents(body);
     return {
       success: true,
       message: body.dryRun
         ? 'Bulk re-enrollment preview completed'
         : 'Bulk re-enrollment completed',
-      data,
+      // data,
     };
   }
 

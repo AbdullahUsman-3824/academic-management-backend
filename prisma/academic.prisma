@@ -66,16 +66,18 @@ model AcademicSession {
 }
 
 model Batch {
-  id              String      @id @default(uuid()) @db.Uuid
-  name            String      @unique
-  entryYearId     String      @map("entry_year_id") @db.Uuid
-  programDuration Int         @default(4) @map("program_duration")
-  sectionCapacity Int?        @map("section_capacity")
-  status          BatchStatus @default(ACTIVE)
-  createdAt       DateTime    @default(now()) @map("created_at")
-  updatedAt       DateTime?   @updatedAt @map("updated_at")
+  id                String      @id @default(uuid()) @db.Uuid
+  name              String      @unique
+  entryYearId       String      @map("entry_year_id") @db.Uuid
+  programDuration   Int         @default(4) @map("program_duration")
+  currentSemesterId String?     @db.Uuid
+  sectionCapacity   Int?        @map("section_capacity")
+  status            BatchStatus @default(ACTIVE)
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime?   @updatedAt @map("updated_at")
 
   entryYear         AcademicYear            @relation(fields: [entryYearId], references: [id])
+  currentSemester   Semester?               @relation("BatchCurrentSemester", fields: [currentSemesterId], references: [id])
   students          Student[]
   sections          Section[]
   courseAssignments BatchCourseAssignment[]
@@ -113,6 +115,7 @@ model Semester {
   batchCourseAssignments BatchCourseAssignment[]
   academicRecords        StudentAcademicRecord[]
   batchSemesters         BatchSemester[]
+  batchCurrentSemester   Batch[]                 @relation("BatchCurrentSemester")
 
   @@map("semesters")
 }
